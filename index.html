@@ -1,0 +1,3309 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>Sunset Trail Runner — Endless Fox Adventure</title>
+  <meta name="description" content="A 60fps HTML5 Canvas endless runner game featuring procedural obstacles, combo scoring, speed ramps, and smooth skeletal fox animations." />
+  <!-- Tailwind CSS for sleek HUD & Modal styling -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Inter Font -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    * {
+      box-sizing: border-box;
+      user-select: none;
+      -webkit-user-select: none;
+      -webkit-touch-callout: none;
+    }
+
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background-color: #111621;
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      touch-action: none;
+    }
+
+    #gameCanvas {
+      display: block;
+      width: 100vw;
+      height: 100vh;
+    }
+
+    /* Glassmorphism HUD Cards matching video inspiration */
+    .hud-card {
+      background: rgba(15, 20, 28, 0.76);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      box-shadow: 0 12px 32px rgba(0, 0, 0, 0.35);
+    }
+
+    .modal-card {
+      background: linear-gradient(180deg, rgba(22, 27, 36, 0.95) 0%, rgba(12, 15, 20, 0.98) 100%);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border: 1px solid rgba(255, 255, 255, 0.09);
+      box-shadow: 0 24px 64px rgba(0, 0, 0, 0.65);
+    }
+
+    .stat-box {
+      background: rgba(255, 255, 255, 0.035);
+      border: 1px solid rgba(255, 255, 255, 0.07);
+    }
+
+    .tabular-nums {
+      font-variant-numeric: tabular-nums;
+    }
+
+    /* Slide Button States */
+    .slide-btn {
+      background: rgba(20, 19, 20, 0.78);
+      color: rgba(255, 255, 255, 0.9);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+      transition: transform 0.1s ease, background-color 0.12s ease, color 0.12s ease;
+    }
+
+    .slide-btn.active {
+      background: #f3f4f6;
+      color: #111827;
+      border-color: #ffffff;
+      transform: scale(0.96);
+      box-shadow: 0 0 24px rgba(255, 255, 255, 0.35);
+    }
+
+    /* Combo Pop Animation */
+    @keyframes comboPulse {
+      0% { transform: scale(1); }
+      40% { transform: scale(1.16); }
+      100% { transform: scale(1); }
+    }
+
+    .combo-pop {
+      animation: comboPulse 0.22s cubic-bezier(0.34, 1.56, 0.64, 1);
+    }
+
+    @keyframes spiritPulse {
+      0%, 100% { box-shadow: 0 0 14px rgba(56, 189, 248, 0.45), inset 0 0 8px rgba(56, 189, 248, 0.25); }
+      50% { box-shadow: 0 0 26px rgba(56, 189, 248, 0.9), inset 0 0 12px rgba(125, 211, 252, 0.5); }
+    }
+
+    .spirit-ready {
+      animation: spiritPulse 1.2s infinite ease-in-out;
+      border-color: rgba(125, 211, 252, 0.85) !important;
+    }
+
+    .dash-btn {
+      background: rgba(14, 28, 46, 0.82);
+      color: rgba(186, 230, 253, 0.95);
+      border: 1px solid rgba(56, 189, 248, 0.35);
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+      transition: transform 0.12s ease, opacity 0.2s ease, background-color 0.15s ease;
+    }
+
+    .dash-btn.ready {
+      background: linear-gradient(135deg, #0284c7 0%, #38bdf8 100%);
+      color: #082f49;
+      border-color: #bae6fd;
+      animation: spiritPulse 1.1s infinite ease-in-out;
+    }
+  </style>
+</head>
+<body class="relative w-screen h-screen overflow-hidden select-none">
+
+  <!-- Main 60FPS Game Canvas -->
+  <canvas id="gameCanvas"></canvas>
+
+  <!-- ==================== TOP-LEFT SCORE, PACE & SPIRIT HUD ==================== -->
+  <div class="fixed top-5 left-5 z-20 pointer-events-none">
+    <div class="hud-card rounded-2xl px-5 py-4 min-w-[190px] sm:min-w-[215px]">
+      <div class="flex items-center justify-between gap-2">
+        <div class="text-xs font-medium text-slate-400 tracking-wide">Score</div>
+        <div id="boost2xBadge" class="hidden px-1.5 py-0.5 rounded bg-amber-400/20 border border-amber-300/40 text-[10px] font-extrabold text-amber-300 tracking-wider uppercase">
+          2x Firefly
+        </div>
+      </div>
+      <div id="scoreDisplay" class="text-3xl sm:text-4xl font-extrabold text-white tabular-nums tracking-tight mt-0.5 leading-none">
+        0
+      </div>
+      <div class="text-xs font-medium text-slate-400 mt-2 tabular-nums">
+        Best <span id="bestScoreDisplay" class="text-white font-bold ml-0.5">0</span>
+      </div>
+      <!-- Pace Speed Ramp Bar -->
+      <div id="paceContainer" class="flex items-center justify-between gap-2.5 mt-2.5 transition-opacity duration-300">
+        <span class="text-[10px] font-bold tracking-widest text-slate-400 uppercase">PACE</span>
+        <div class="w-24 sm:w-28 h-1.5 bg-white/15 rounded-full overflow-hidden">
+          <div id="paceBarFill" class="h-full bg-white/90 rounded-full transition-all duration-150" style="width: 12%;"></div>
+        </div>
+      </div>
+      <!-- Spirit Fox Dash Energy Meter (70 Combos required) -->
+      <div id="spiritContainer" class="mt-2 transition-opacity duration-300">
+        <div class="flex items-center justify-between text-[10px] font-bold tracking-wider uppercase mb-1">
+          <span id="spiritLabel" class="text-sky-300">SPIRIT</span>
+          <span id="spiritStatusText" class="text-slate-400 tabular-nums">0/70</span>
+        </div>
+        <div id="spiritBarTrack" class="w-full h-2 bg-sky-950/80 border border-sky-400/20 rounded-full overflow-hidden">
+          <div id="spiritBarFill" class="h-full bg-gradient-to-r from-sky-500 via-cyan-300 to-white rounded-full transition-all duration-150" style="width: 0%;"></div>
+        </div>
+      </div>
+      <!-- Firefly Companion Active Timer Row -->
+      <div id="fireflyHudRow" class="hidden items-center justify-between gap-2 mt-2 pt-1.5 border-t border-white/10 text-[11px] font-semibold text-lime-300">
+        <span class="flex items-center gap-1.5">
+          <span class="w-2 h-2 rounded-full bg-lime-300 shadow-[0_0_8px_#bef264] animate-ping"></span>
+          <span>Firefly Magnet</span>
+        </span>
+        <span id="fireflyTimerText" class="tabular-nums font-bold">10.0s</span>
+      </div>
+      <!-- Periodic Day-Night Phase Indicator -->
+      <div id="phaseBadge" class="flex items-center justify-between gap-1.5 mt-2 pt-2 border-t border-white/10 text-[11px] font-semibold text-amber-300/90 tracking-wide transition-colors duration-300">
+        <div class="flex items-center gap-1.5">
+          <span id="phaseDot" class="w-2 h-2 rounded-full bg-amber-400 shadow-[0_0_8px_#fbbf24]"></span>
+          <span id="phaseLabel">Sunset</span>
+        </div>
+        <span id="weatherSubLabel" class="text-[10px] text-slate-400 font-medium">Golden Dusk</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== TOP-CENTER ACHIEVEMENT & EVENT TOAST ==================== -->
+  <div id="achievementToast" class="fixed top-5 left-1/2 -translate-x-1/2 z-30 pointer-events-none opacity-0 -translate-y-4 transition-all duration-300">
+    <div class="hud-card rounded-2xl px-4 py-2.5 flex items-center gap-3 border border-amber-300/30 shadow-2xl">
+      <div id="toastIcon" class="w-8 h-8 rounded-xl bg-amber-400/20 border border-amber-300/40 flex items-center justify-center text-base">
+        ✨
+      </div>
+      <div>
+        <div id="toastCategory" class="text-[10px] font-extrabold tracking-widest text-amber-300 uppercase">Big Achievement Unlocked</div>
+        <div id="toastTitle" class="text-xs sm:text-sm font-bold text-white leading-tight">Centurion Flow</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== TOP-RIGHT AUDIO, PAUSE & TRAIL HUD ==================== -->
+  <div class="fixed top-5 right-5 z-20 flex items-center gap-2">
+    <!-- Pause Button -->
+    <button
+      id="pauseBtn"
+      type="button"
+      title="Pause Run (Shortcut: P or Esc)"
+      class="hud-card h-11 px-3.5 rounded-full flex items-center gap-1.5 text-xs font-semibold text-white/90 hover:text-white hover:bg-slate-800/80 active:scale-95 transition focus:outline-none cursor-pointer"
+    >
+      <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="6" y="4" width="4" height="16"></rect>
+        <rect x="14" y="4" width="4" height="16"></rect>
+      </svg>
+      <span class="hidden sm:inline">Pause</span>
+    </button>
+
+    <!-- Unlockable Trail Skin Selector Button -->
+    <button
+      id="trailSelectBtn"
+      type="button"
+      title="Click to switch Fox Trail Skin"
+      class="hud-card h-11 px-3.5 rounded-full flex items-center gap-2 text-xs font-semibold text-white/90 hover:text-white hover:bg-slate-800/80 active:scale-95 transition focus:outline-none cursor-pointer"
+    >
+      <span id="trailSwatch" class="w-2.5 h-2.5 rounded-full bg-amber-400 shadow-[0_0_8px_#fbbf24]"></span>
+      <span id="trailNameLabel">Trail: Embers</span>
+    </button>
+
+    <!-- Sound Toggle Button -->
+    <button
+      id="soundToggleBtn"
+      type="button"
+      aria-label="Toggle Sound"
+      class="hud-card w-11 h-11 rounded-full flex items-center justify-center text-white/90 hover:text-white hover:bg-slate-800/80 active:scale-95 transition focus:outline-none cursor-pointer"
+    >
+      <!-- Speaker On Icon -->
+      <svg id="speakerOnIcon" xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
+        <path d="M15.54 8.46a5 5 0 0 1 0 7.07"></path>
+        <path d="M19.07 4.93a10 10 0 0 1 0 14.14"></path>
+      </svg>
+      <!-- Speaker Off Icon -->
+      <svg id="speakerOffIcon" xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 hidden text-slate-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
+        <line x1="23" y1="9" x2="17" y2="15"></line>
+        <line x1="17" y1="9" x2="23" y2="15"></line>
+      </svg>
+    </button>
+  </div>
+
+  <!-- Combo Multiplier Badge -->
+  <div id="comboCard" class="fixed top-20 right-5 z-20 hud-card rounded-xl px-4 py-2 text-right pointer-events-none opacity-0 translate-y-1 transition-all duration-200">
+    <div class="text-[10px] font-bold tracking-widest text-slate-400 uppercase">COMBO</div>
+    <div id="comboDisplay" class="text-xl sm:text-2xl font-extrabold text-[#ff7d3b] tabular-nums leading-tight">
+      x1
+    </div>
+  </div>
+
+  <!-- ==================== CENTER INSTRUCTION PROMPT ==================== -->
+  <div id="controlsHint" class="fixed left-1/2 -translate-x-1/2 z-10 pointer-events-none text-center transition-opacity duration-500 px-4 w-full max-w-lg" style="bottom: 24%;">
+    <p class="text-xs sm:text-sm font-medium text-white/70 tracking-wide drop-shadow">
+      Space/Tap to Jump &middot; Tap Slide to Duck (0.75s) &middot; Shift or Spirit Button for Blue-Flame Dash
+    </p>
+  </div>
+
+  <!-- ==================== BOTTOM-RIGHT SPIRIT DASH & SLIDE BUTTONS ==================== -->
+  <button
+    id="dashBtn"
+    type="button"
+    aria-label="Trigger Spirit Fox Dash"
+    class="dash-btn fixed bottom-6 right-28 sm:right-32 z-20 w-[74px] h-[74px] sm:w-[82px] sm:h-[82px] rounded-full flex flex-col items-center justify-center gap-0.5 cursor-pointer focus:outline-none opacity-0 pointer-events-none"
+  >
+    <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round">
+      <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
+    </svg>
+    <span class="text-[10px] font-extrabold tracking-wider uppercase">SPIRIT</span>
+  </button>
+
+  <button
+    id="slideBtn"
+    type="button"
+    aria-label="Slide or Duck"
+    class="slide-btn fixed bottom-6 right-6 z-20 w-[74px] h-[74px] sm:w-[82px] sm:h-[82px] rounded-full flex flex-col items-center justify-center gap-0.5 cursor-pointer focus:outline-none opacity-0 pointer-events-none"
+  >
+    <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+      <polyline points="6 9 12 15 18 9"></polyline>
+    </svg>
+    <span class="text-[11px] font-bold tracking-wider uppercase">SLIDE</span>
+  </button>
+
+  <!-- ==================== LANDING PAGE MODAL ("START THE RUN") ==================== -->
+  <div
+    id="startModal"
+    class="fixed inset-0 z-30 flex items-center justify-center px-4 transition-opacity duration-300"
+  >
+    <div id="startCard" class="modal-card w-full max-w-[460px] rounded-[28px] p-6 sm:p-8 text-white transform scale-100 transition-transform duration-300">
+      <div class="flex items-center justify-center gap-2">
+        <span class="px-2.5 py-1 rounded-full bg-amber-400/15 border border-amber-300/30 text-[10px] font-extrabold tracking-[0.18em] text-amber-300 uppercase">
+          Endless Fox Adventure
+        </span>
+      </div>
+
+      <div class="text-center mt-3">
+        <h1 class="text-3xl sm:text-4xl font-extrabold tracking-tight text-white">
+          Sunset Trail Runner
+        </h1>
+        <p class="text-xs sm:text-sm text-slate-300/90 mt-2.5 leading-relaxed">
+          Guide the explorer fox across an evolving desert trail that transitions from golden sunset into starry night and daybreak. Leap over crates and chasms, duck under glowing totem pillars, and chain combos across the horizon.
+        </p>
+      </div>
+
+      <!-- Feature Highlights Grid -->
+      <div class="grid grid-cols-2 gap-2.5 mt-5 text-left">
+        <div class="stat-box rounded-xl p-3">
+          <div class="text-[11px] font-bold text-amber-300">🌅 Day–Night Cycle</div>
+          <div class="text-[11px] text-slate-400 mt-0.5 leading-snug">Dynamic sky, shooting star catches &amp; night lantern glow.</div>
+        </div>
+        <div class="stat-box rounded-xl p-3">
+          <div class="text-[11px] font-bold text-sky-300">⚡ Spirit Fox Dash</div>
+          <div class="text-[11px] text-slate-400 mt-0.5 leading-snug">Collect 70 combos to unleash an invincible crate-smashing sprint.</div>
+        </div>
+        <div class="stat-box rounded-xl p-3">
+          <div class="text-[11px] font-bold text-lime-300">🏮 Firefly Magnet</div>
+          <div class="text-[11px] text-slate-400 mt-0.5 leading-snug">Grab Forest Orbs for 10s coin magnetism &amp; 2x score boost.</div>
+        </div>
+        <div class="stat-box rounded-xl p-3">
+          <div class="text-[11px] font-bold text-pink-300">✨ Trail Cosmetics</div>
+          <div class="text-[11px] text-slate-400 mt-0.5 leading-snug">Unlock Embers, Sakura, Aurora &amp; Desert trails via achievements.</div>
+        </div>
+      </div>
+
+      <!-- Controls Mini Bar -->
+      <div class="stat-box rounded-xl px-3.5 py-2.5 mt-4 flex items-center justify-between text-[11px] text-slate-300">
+        <span><strong class="text-white">Space / Tap:</strong> Jump</span>
+        <span>&middot;</span>
+        <span><strong class="text-white">Down / Slide:</strong> Duck</span>
+        <span>&middot;</span>
+        <span><strong class="text-white">Shift:</strong> Spirit Dash</span>
+      </div>
+
+      <!-- Start the Run Button -->
+      <button
+        id="startRunBtn"
+        type="button"
+        class="w-full mt-6 py-4 rounded-2xl bg-gradient-to-r from-amber-400 via-orange-400 to-amber-300 hover:brightness-110 active:scale-[0.99] text-slate-950 font-extrabold text-base tracking-tight transition shadow-[0_10px_28px_rgba(251,146,60,0.35)] cursor-pointer focus:outline-none"
+      >
+        Start the run
+      </button>
+
+      <div class="text-center mt-3">
+        <span class="text-xs text-slate-400/90 font-medium">Press Space or click to begin</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== PAUSE OVERLAY ==================== -->
+  <div
+    id="pauseModal"
+    class="fixed inset-0 z-30 flex items-center justify-center px-4 opacity-0 pointer-events-none transition-opacity duration-200"
+  >
+    <div class="modal-card w-full max-w-[380px] rounded-[26px] p-6 text-white text-center shadow-2xl">
+      <div class="text-[11px] font-semibold tracking-[0.22em] text-slate-400 uppercase">GAME PAUSED</div>
+      <h2 class="text-2xl font-extrabold text-white mt-1">Take a breath</h2>
+      <div class="mt-6 flex flex-col gap-3">
+        <button
+          id="resumeBtn"
+          type="button"
+          class="w-full py-3.5 rounded-2xl bg-gradient-to-r from-amber-400 to-orange-400 text-slate-950 font-extrabold text-sm tracking-tight transition hover:brightness-110 cursor-pointer"
+        >
+          Resume run (P)
+        </button>
+        <button
+          id="pauseRestartBtn"
+          type="button"
+          class="w-full py-3.5 rounded-2xl bg-white/10 hover:bg-white/20 text-white font-bold text-sm transition cursor-pointer"
+        >
+          Restart run
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== GAME OVER MODAL ("RUN OVER - Trail ends") ==================== -->
+  <div
+    id="gameOverModal"
+    class="fixed inset-0 z-30 flex items-center justify-center px-4 opacity-0 pointer-events-none transition-opacity duration-300"
+  >
+    <div id="gameOverCard" class="modal-card w-full max-w-[430px] rounded-[26px] p-6 sm:p-8 text-white transform scale-95 transition-transform duration-300">
+      <div class="text-center">
+        <div class="text-[11px] font-semibold tracking-[0.22em] text-slate-400 uppercase">RUN OVER</div>
+        <h2 class="text-3xl sm:text-4xl font-extrabold tracking-tight text-white mt-1">Trail ends</h2>
+      </div>
+
+      <!-- Score & Best Combo Grid -->
+      <div class="grid grid-cols-2 gap-3.5 mt-7">
+        <div class="stat-box rounded-2xl p-4">
+          <div class="text-xs font-medium text-slate-400">Score</div>
+          <div id="finalScoreText" class="text-2xl sm:text-3xl font-extrabold text-white tabular-nums mt-1">0</div>
+        </div>
+        <div class="stat-box rounded-2xl p-4">
+          <div class="text-xs font-medium text-slate-400">Best combo</div>
+          <div id="finalComboText" class="text-2xl sm:text-3xl font-extrabold text-white tabular-nums mt-1">x1</div>
+        </div>
+      </div>
+
+      <!-- High Score Box -->
+      <div class="stat-box rounded-2xl p-4 mt-3.5">
+        <div id="highScoreLabel" class="text-xs font-medium text-slate-400">High score</div>
+        <div id="finalHighScoreText" class="text-2xl sm:text-3xl font-extrabold text-white tabular-nums mt-1">0</div>
+      </div>
+
+      <!-- Unlocked Achievements Summary on Game Over -->
+      <div class="stat-box rounded-2xl p-3.5 mt-3.5 flex items-center justify-between">
+        <div class="text-xs font-medium text-slate-400">Big Achievements Unlocked</div>
+        <div id="finalAchievementsText" class="text-sm font-bold text-amber-300 tabular-nums">0 / 10</div>
+      </div>
+
+      <!-- Share Score Card Button -->
+      <button
+        id="shareScoreBtn"
+        type="button"
+        class="w-full mt-4 py-3 rounded-xl bg-sky-500/20 hover:bg-sky-500/30 border border-sky-400/30 text-sky-200 text-xs font-bold transition flex items-center justify-center gap-2 cursor-pointer"
+      >
+        <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"></path>
+          <polyline points="16 6 12 2 8 6"></polyline>
+          <line x1="12" y1="2" x2="12" y2="15"></line>
+        </svg>
+        <span id="shareBtnText">Copy Shareable Score Card</span>
+      </button>
+
+      <!-- Restart Button -->
+      <button
+        id="restartBtn"
+        type="button"
+        class="w-full mt-4 py-4 rounded-2xl bg-[#f3f4f6] hover:bg-white active:scale-[0.99] text-slate-950 font-bold text-base tracking-tight transition shadow-lg cursor-pointer focus:outline-none"
+      >
+        Run again
+      </button>
+
+      <div class="text-center mt-3">
+        <span class="text-xs text-slate-400/90 font-medium">Space or tap to restart</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== GAME ENGINE & LOGIC ==================== -->
+  <script>
+    /**
+     * ============================================================================
+     * SUNSET TRAIL RUNNER — 60FPS HTML5 CANVAS ENDLESS RUNNER
+     * ============================================================================
+     */
+
+    (function () {
+      'use strict';
+
+      // --- DOM Elements ---
+      const canvas = document.getElementById('gameCanvas');
+      const ctx = canvas.getContext('2d');
+      const scoreDisplay = document.getElementById('scoreDisplay');
+      const bestScoreDisplay = document.getElementById('bestScoreDisplay');
+      const boost2xBadge = document.getElementById('boost2xBadge');
+      const paceContainer = document.getElementById('paceContainer');
+      const paceBarFill = document.getElementById('paceBarFill');
+      const spiritContainer = document.getElementById('spiritContainer');
+      const spiritLabel = document.getElementById('spiritLabel');
+      const spiritStatusText = document.getElementById('spiritStatusText');
+      const spiritBarTrack = document.getElementById('spiritBarTrack');
+      const spiritBarFill = document.getElementById('spiritBarFill');
+      const fireflyHudRow = document.getElementById('fireflyHudRow');
+      const fireflyTimerText = document.getElementById('fireflyTimerText');
+      const phaseBadge = document.getElementById('phaseBadge');
+      const phaseDot = document.getElementById('phaseDot');
+      const phaseLabel = document.getElementById('phaseLabel');
+      const weatherSubLabel = document.getElementById('weatherSubLabel');
+      const achievementToast = document.getElementById('achievementToast');
+      const toastIcon = document.getElementById('toastIcon');
+      const toastCategory = document.getElementById('toastCategory');
+      const toastTitle = document.getElementById('toastTitle');
+      const pauseBtn = document.getElementById('pauseBtn');
+      const pauseModal = document.getElementById('pauseModal');
+      const resumeBtn = document.getElementById('resumeBtn');
+      const pauseRestartBtn = document.getElementById('pauseRestartBtn');
+      const trailSelectBtn = document.getElementById('trailSelectBtn');
+      const trailSwatch = document.getElementById('trailSwatch');
+      const trailNameLabel = document.getElementById('trailNameLabel');
+      const comboCard = document.getElementById('comboCard');
+      const comboDisplay = document.getElementById('comboDisplay');
+      const controlsHint = document.getElementById('controlsHint');
+      const dashBtn = document.getElementById('dashBtn');
+      const slideBtn = document.getElementById('slideBtn');
+      const soundToggleBtn = document.getElementById('soundToggleBtn');
+      const speakerOnIcon = document.getElementById('speakerOnIcon');
+      const speakerOffIcon = document.getElementById('speakerOffIcon');
+
+      const gameOverModal = document.getElementById('gameOverModal');
+      const gameOverCard = document.getElementById('gameOverCard');
+      const finalScoreText = document.getElementById('finalScoreText');
+      const finalComboText = document.getElementById('finalComboText');
+      const highScoreLabel = document.getElementById('highScoreLabel');
+      const finalHighScoreText = document.getElementById('finalHighScoreText');
+      const finalAchievementsText = document.getElementById('finalAchievementsText');
+      const shareScoreBtn = document.getElementById('shareScoreBtn');
+      const shareBtnText = document.getElementById('shareBtnText');
+      const restartBtn = document.getElementById('restartBtn');
+      const startModal = document.getElementById('startModal');
+      const startCard = document.getElementById('startCard');
+      const startRunBtn = document.getElementById('startRunBtn');
+
+      // --- LocalStorage Keys ---
+      const STORAGE_KEY_BEST_SCORE = 'sunset_fox_runner_high_score_v1';
+      const STORAGE_KEY_TRAIL_SKIN = 'sunset_fox_runner_trail_skin_v1';
+      const STORAGE_KEY_ACHIEVEMENTS = 'sunset_fox_runner_big_achievements_v2';
+
+      // --- Safe LocalStorage Helpers ---
+      function loadBestScore() {
+        try {
+          const val = localStorage.getItem(STORAGE_KEY_BEST_SCORE);
+          return val ? parseInt(val, 10) || 0 : 0;
+        } catch (e) {
+          return 0;
+        }
+      }
+
+      function saveBestScore(score) {
+        try {
+          localStorage.setItem(STORAGE_KEY_BEST_SCORE, String(Math.floor(score)));
+        } catch (e) {}
+      }
+
+      function loadSavedTrailSkin() {
+        try {
+          return localStorage.getItem(STORAGE_KEY_TRAIL_SKIN) || 'EMBERS';
+        } catch (e) {
+          return 'EMBERS';
+        }
+      }
+
+      function saveTrailSkin(skinId) {
+        try {
+          localStorage.setItem(STORAGE_KEY_TRAIL_SKIN, skinId);
+        } catch (e) {}
+      }
+
+      function loadAchievements() {
+        try {
+          const raw = localStorage.getItem(STORAGE_KEY_ACHIEVEMENTS);
+          return raw ? JSON.parse(raw) : {};
+        } catch (e) {
+          return {};
+        }
+      }
+
+      function saveAchievements(obj) {
+        try {
+          localStorage.setItem(STORAGE_KEY_ACHIEVEMENTS, JSON.stringify(obj));
+        } catch (e) {}
+      }
+
+      // ============================================================================
+      // WEB AUDIO API SOUND SYNTHESIZER
+      // ============================================================================
+      class SoundEngine {
+        constructor() {
+          this.ctx = null;
+          this.muted = false;
+        }
+
+        init() {
+          if (!this.ctx) {
+            const AudioCtx = window.AudioContext || window.webkitAudioContext;
+            if (AudioCtx) {
+              this.ctx = new AudioCtx();
+            }
+          }
+          if (this.ctx && this.ctx.state === 'suspended') {
+            this.ctx.resume();
+          }
+        }
+
+        toggleMute() {
+          this.muted = !this.muted;
+          speakerOnIcon.classList.toggle('hidden', this.muted);
+          speakerOffIcon.classList.toggle('hidden', !this.muted);
+        }
+
+        playPickup(combo = 1) {
+          if (this.muted) return;
+          this.init();
+          if (!this.ctx) return;
+
+          const now = this.ctx.currentTime;
+          const osc = this.ctx.createOscillator();
+          const gain = this.ctx.createGain();
+
+          const pitchBoost = Math.min(combo * 6, 320);
+          const baseFreq = 520 + pitchBoost;
+
+          osc.type = 'sine';
+          osc.frequency.setValueAtTime(baseFreq, now);
+          osc.frequency.exponentialRampToValueAtTime(baseFreq * 1.45, now + 0.065);
+
+          gain.gain.setValueAtTime(0.001, now);
+          gain.gain.linearRampToValueAtTime(0.18, now + 0.01);
+          gain.gain.exponentialRampToValueAtTime(0.001, now + 0.09);
+
+          osc.connect(gain);
+          gain.connect(this.ctx.destination);
+          osc.start(now);
+          osc.stop(now + 0.095);
+        }
+
+        playJump() {
+          if (this.muted) return;
+          this.init();
+          if (!this.ctx) return;
+
+          const now = this.ctx.currentTime;
+          const osc = this.ctx.createOscillator();
+          const gain = this.ctx.createGain();
+
+          osc.type = 'sine';
+          osc.frequency.setValueAtTime(240, now);
+          osc.frequency.exponentialRampToValueAtTime(520, now + 0.09);
+
+          gain.gain.setValueAtTime(0.001, now);
+          gain.gain.linearRampToValueAtTime(0.14, now + 0.012);
+          gain.gain.exponentialRampToValueAtTime(0.001, now + 0.11);
+
+          osc.connect(gain);
+          gain.connect(this.ctx.destination);
+          osc.start(now);
+          osc.stop(now + 0.12);
+        }
+
+        playLand() {
+          if (this.muted) return;
+          this.init();
+          if (!this.ctx) return;
+
+          const now = this.ctx.currentTime;
+          const osc = this.ctx.createOscillator();
+          const gain = this.ctx.createGain();
+
+          osc.type = 'triangle';
+          osc.frequency.setValueAtTime(140, now);
+          osc.frequency.exponentialRampToValueAtTime(55, now + 0.06);
+
+          gain.gain.setValueAtTime(0.09, now);
+          gain.gain.exponentialRampToValueAtTime(0.001, now + 0.065);
+
+          osc.connect(gain);
+          gain.connect(this.ctx.destination);
+          osc.start(now);
+          osc.stop(now + 0.07);
+        }
+
+        playSlide() {
+          if (this.muted) return;
+          this.init();
+          if (!this.ctx) return;
+
+          const now = this.ctx.currentTime;
+          const osc = this.ctx.createOscillator();
+          const gain = this.ctx.createGain();
+
+          osc.type = 'sine';
+          osc.frequency.setValueAtTime(340, now);
+          osc.frequency.exponentialRampToValueAtTime(180, now + 0.08);
+
+          gain.gain.setValueAtTime(0.1, now);
+          gain.gain.exponentialRampToValueAtTime(0.001, now + 0.085);
+
+          osc.connect(gain);
+          gain.connect(this.ctx.destination);
+          osc.start(now);
+          osc.stop(now + 0.09);
+        }
+
+        playCloseCall() {
+          if (this.muted) return;
+          this.init();
+          if (!this.ctx) return;
+
+          const now = this.ctx.currentTime;
+          const osc = this.ctx.createOscillator();
+          const gain = this.ctx.createGain();
+
+          osc.type = 'triangle';
+          osc.frequency.setValueAtTime(680, now);
+          osc.frequency.exponentialRampToValueAtTime(980, now + 0.08);
+
+          gain.gain.setValueAtTime(0.12, now);
+          gain.gain.exponentialRampToValueAtTime(0.001, now + 0.1);
+
+          osc.connect(gain);
+          gain.connect(this.ctx.destination);
+          osc.start(now);
+          osc.stop(now + 0.11);
+        }
+
+        playCollision() {
+          if (this.muted) return;
+          this.init();
+          if (!this.ctx) return;
+
+          const now = this.ctx.currentTime;
+          const osc = this.ctx.createOscillator();
+          const gain = this.ctx.createGain();
+
+          osc.type = 'sawtooth';
+          osc.frequency.setValueAtTime(170, now);
+          osc.frequency.exponentialRampToValueAtTime(42, now + 0.28);
+
+          gain.gain.setValueAtTime(0.22, now);
+          gain.gain.exponentialRampToValueAtTime(0.001, now + 0.3);
+
+          osc.connect(gain);
+          gain.connect(this.ctx.destination);
+          osc.start(now);
+          osc.stop(now + 0.31);
+        }
+
+        playSpiritDash() {
+          if (this.muted) return;
+          this.init();
+          if (!this.ctx) return;
+
+          const now = this.ctx.currentTime;
+          const freqs = [330, 495, 660, 990];
+          freqs.forEach((f, idx) => {
+            const osc = this.ctx.createOscillator();
+            const gain = this.ctx.createGain();
+            osc.type = idx % 2 === 0 ? 'triangle' : 'sine';
+            osc.frequency.setValueAtTime(f * 0.8, now);
+            osc.frequency.exponentialRampToValueAtTime(f * 1.5, now + 0.28);
+
+            gain.gain.setValueAtTime(0.001, now);
+            gain.gain.linearRampToValueAtTime(0.08, now + 0.03);
+            gain.gain.exponentialRampToValueAtTime(0.001, now + 0.32);
+
+            osc.connect(gain);
+            gain.connect(this.ctx.destination);
+            osc.start(now);
+            osc.stop(now + 0.33);
+          });
+        }
+
+        playCrateSmash() {
+          if (this.muted) return;
+          this.init();
+          if (!this.ctx) return;
+
+          const now = this.ctx.currentTime;
+          const osc = this.ctx.createOscillator();
+          const gain = this.ctx.createGain();
+
+          osc.type = 'triangle';
+          osc.frequency.setValueAtTime(280, now);
+          osc.frequency.exponentialRampToValueAtTime(880, now + 0.14);
+
+          gain.gain.setValueAtTime(0.2, now);
+          gain.gain.exponentialRampToValueAtTime(0.001, now + 0.16);
+
+          osc.connect(gain);
+          gain.connect(this.ctx.destination);
+          osc.start(now);
+          osc.stop(now + 0.17);
+        }
+
+        playOrbPickup() {
+          if (this.muted) return;
+          this.init();
+          if (!this.ctx) return;
+
+          const now = this.ctx.currentTime;
+          const notes = [523.25, 659.25, 783.99, 1046.5];
+          notes.forEach((n, i) => {
+            const osc = this.ctx.createOscillator();
+            const gain = this.ctx.createGain();
+            osc.type = 'sine';
+            const start = now + i * 0.045;
+            osc.frequency.setValueAtTime(n, start);
+            gain.gain.setValueAtTime(0.001, start);
+            gain.gain.linearRampToValueAtTime(0.14, start + 0.01);
+            gain.gain.exponentialRampToValueAtTime(0.001, start + 0.18);
+            osc.connect(gain);
+            gain.connect(this.ctx.destination);
+            osc.start(start);
+            osc.stop(start + 0.19);
+          });
+        }
+
+        playStarCatch() {
+          if (this.muted) return;
+          this.init();
+          if (!this.ctx) return;
+
+          const now = this.ctx.currentTime;
+          const notes = [880, 1174.66, 1567.98];
+          notes.forEach((n, i) => {
+            const osc = this.ctx.createOscillator();
+            const gain = this.ctx.createGain();
+            osc.type = 'sine';
+            const start = now + i * 0.05;
+            osc.frequency.setValueAtTime(n, start);
+            gain.gain.setValueAtTime(0.001, start);
+            gain.gain.linearRampToValueAtTime(0.15, start + 0.015);
+            gain.gain.exponentialRampToValueAtTime(0.001, start + 0.25);
+            osc.connect(gain);
+            gain.connect(this.ctx.destination);
+            osc.start(start);
+            osc.stop(start + 0.26);
+          });
+        }
+
+        playAchievementFanfare() {
+          if (this.muted) return;
+          this.init();
+          if (!this.ctx) return;
+
+          const now = this.ctx.currentTime;
+
+          const melody = [
+            { freq: 523.25, start: 0.00, dur: 0.14, type: 'triangle', vol: 0.16 }, // C5
+            { freq: 659.25, start: 0.11, dur: 0.14, type: 'triangle', vol: 0.16 }, // E5
+            { freq: 783.99, start: 0.22, dur: 0.14, type: 'triangle', vol: 0.18 }, // G5
+            { freq: 1046.50, start: 0.34, dur: 0.52, type: 'triangle', vol: 0.22 }, // C6
+            { freq: 1318.51, start: 0.34, dur: 0.52, type: 'sine',     vol: 0.14 }  // E6
+          ];
+
+          melody.forEach((note) => {
+            const osc = this.ctx.createOscillator();
+            const gain = this.ctx.createGain();
+            osc.type = note.type;
+            osc.frequency.setValueAtTime(note.freq, now + note.start);
+
+            gain.gain.setValueAtTime(0.001, now + note.start);
+            gain.gain.linearRampToValueAtTime(note.vol, now + note.start + 0.02);
+            gain.gain.exponentialRampToValueAtTime(0.001, now + note.start + note.dur);
+
+            osc.connect(gain);
+            gain.connect(this.ctx.destination);
+            osc.start(now + note.start);
+            osc.stop(now + note.start + note.dur + 0.02);
+          });
+
+          const glideOsc = this.ctx.createOscillator();
+          const glideGain = this.ctx.createGain();
+          glideOsc.type = 'sine';
+          glideOsc.frequency.setValueAtTime(440, now + 0.15);
+          glideOsc.frequency.exponentialRampToValueAtTime(880, now + 0.38);
+          glideOsc.frequency.setValueAtTime(784, now + 0.42);
+          glideOsc.frequency.exponentialRampToValueAtTime(1174.66, now + 0.75);
+
+          glideGain.gain.setValueAtTime(0.001, now + 0.15);
+          glideGain.gain.linearRampToValueAtTime(0.12, now + 0.22);
+          glideGain.gain.exponentialRampToValueAtTime(0.001, now + 0.82);
+
+          glideOsc.connect(glideGain);
+          glideGain.connect(this.ctx.destination);
+          glideOsc.start(now + 0.15);
+          glideOsc.stop(now + 0.84);
+        }
+      }
+
+      const sound = new SoundEngine();
+
+      // ============================================================================
+      // WORLD, SLIDE & REALISTIC DAY-NIGHT TIMELINE CONFIGURATION
+      // ============================================================================
+      let width = window.innerWidth;
+      let height = window.innerHeight;
+      let dpr = Math.min(window.devicePixelRatio || 1, 2);
+      let groundY = Math.floor(height * 0.82);
+
+      const BASE_SPEED = 450;
+      const MAX_SPEED = 810;
+      const SPIRIT_SPEED_MULT = 1.35;
+      const SPEED_RAMP_TIME = 115;
+      const SLIDE_MIN_DURATION = 0.75;
+      const DAY_NIGHT_CYCLE_SECONDS = 120;
+      const SPIRIT_MAX = 70;
+      const SPIRIT_DASH_DURATION = 4.0;
+      const FIREFLY_DURATION = 10.0;
+      const GRAVITY = 1860;
+      const JUMP_VELOCITY = -670;
+      const FAST_FALL_GRAVITY_MULT = 2.4;
+
+      let gameState = 'START'; // 'START' | 'PLAYING' | 'PAUSED' | 'GAMEOVER'
+      let score = 0;
+      let bestScore = loadBestScore();
+      let combo = 0;
+      let maxCombo = 0;
+      let elapsedTime = 0;
+      let currentSpeed = BASE_SPEED;
+      let paceRatio = 0.08;
+      let isNewHighScore = false;
+      let gameOverTimestamp = 0;
+
+      let spiritEnergy = 0;
+      let spiritDashTimer = 0;
+      let fireflyTimer = 0;
+      let fireflyAngle = 0;
+      let cratesSmashedCount = 0;
+      let starsCaughtCount = 0;
+      let spiritDashesUsed = 0;
+      let closeCallsCount = 0;
+      let orbsCollectedCount = 0;
+
+      let cycleProgress = 0;
+      let nightFactor = 0;
+      let stars = [];
+      let shootingStars = [];
+      let shootingStarCooldown = 4.5;
+
+      const TRAIL_SKINS = [
+        { id: 'EMBERS', name: 'Embers', swatch: '#fb923c', shadow: '#f97316' },
+        { id: 'SAKURA', name: 'Sakura', swatch: '#f472b6', shadow: '#ec4899' },
+        { id: 'AURORA', name: 'Aurora', swatch: '#2dd4bf', shadow: '#14b8a6' },
+        { id: 'DUST',   name: 'Desert', swatch: '#d6b08c', shadow: '#a88565' }
+      ];
+      let currentTrailSkin = loadSavedTrailSkin();
+      let unlockedAchievements = loadAchievements();
+      let toastTimeout = null;
+      let auroraPoints = [];
+
+      let shakeTime = 0;
+      let shakeMagnitude = 0;
+
+      let obstacles = [];
+      let collectibles = [];
+      let particles = [];
+      let popups = [];
+      let groundPebbles = [];
+      let groundDashes = [];
+      let mountainLayers = [];
+      let nextSpawnDistance = 450;
+
+      const input = {
+        jumpPressed: false,
+        jumpBufferTimer: 0,
+        slideHeld: false,
+        slideQueued: false,
+        touchStartY: null,
+        touchStartX: null,
+        swipedDownThisTouch: false,
+        lastTapTime: 0
+      };
+
+      function lerp(a, b, t) {
+        return a + (b - a) * t;
+      }
+
+      function lerpRGB(c1, c2, t) {
+        const r = Math.round(lerp(c1[0], c2[0], t));
+        const g = Math.round(lerp(c1[1], c2[1], t));
+        const b = Math.round(lerp(c1[2], c2[2], t));
+        return `rgb(${r}, ${g}, ${b})`;
+      }
+
+      // Realistic Day-Night Timeline Keyframes (Fast sunset -> Moderate night -> Slow dawn -> Much slower day)
+      const SKY_KEYFRAMES = [
+        {
+          p: 0.00, name: 'Sunset', weather: 'Golden Dusk', night: 0.18,
+          sky: [[18, 23, 34], [27, 34, 48], [59, 55, 64], [140, 85, 59], [207, 118, 54], [235, 159, 74]],
+          mtnBack: [60, 46, 38], mtnMid: [76, 58, 46],
+          soilTop: [54, 41, 31], soilMid: [39, 30, 22], soilBot: [24, 18, 13],
+          horizonLine: [158, 132, 107], dashColor: [126, 105, 84]
+        },
+        {
+          p: 0.10, name: 'Night', weather: 'Starry Night', night: 0.95,
+          sky: [[5, 8, 18], [9, 14, 28], [16, 24, 46], [25, 36, 66], [36, 50, 84], [48, 64, 102]],
+          mtnBack: [22, 30, 52], mtnMid: [30, 41, 68],
+          soilTop: [28, 36, 54], soilMid: [19, 25, 40], soilBot: [11, 15, 26],
+          horizonLine: [110, 175, 235], dashColor: [95, 145, 198]
+        },
+        {
+          p: 0.40, name: 'Night', weather: 'Meteor Shower', night: 1.0,
+          sky: [[4, 7, 16], [8, 12, 26], [14, 22, 44], [22, 33, 62], [32, 48, 82], [46, 64, 104]],
+          mtnBack: [20, 28, 48], mtnMid: [28, 39, 66],
+          soilTop: [26, 35, 52], soilMid: [18, 24, 38], soilBot: [10, 14, 24],
+          horizonLine: [120, 185, 245], dashColor: [102, 155, 210]
+        },
+        {
+          p: 0.50, name: 'Dawn', weather: 'Golden Sunbeams', night: 0.25,
+          sky: [[24, 28, 52], [48, 46, 78], [98, 68, 96], [176, 96, 98], [232, 142, 96], [252, 202, 124]],
+          mtnBack: [72, 52, 64], mtnMid: [94, 66, 72],
+          soilTop: [68, 48, 44], soilMid: [48, 34, 32], soilBot: [28, 20, 19],
+          horizonLine: [210, 158, 132], dashColor: [168, 124, 104]
+        },
+        {
+          p: 0.58, name: 'Day', weather: 'Sunbeams & Breeze', night: 0.0,
+          sky: [[28, 102, 168], [48, 132, 198], [82, 164, 222], [135, 198, 235], [215, 226, 210], [250, 228, 172]],
+          mtnBack: [122, 92, 68], mtnMid: [148, 108, 76],
+          soilTop: [106, 76, 52], soilMid: [82, 58, 38], soilBot: [52, 36, 24],
+          horizonLine: [222, 186, 142], dashColor: [188, 152, 112]
+        },
+        {
+          p: 0.88, name: 'Day', weather: 'Clear Sky', night: 0.0,
+          sky: [[32, 96, 160], [56, 126, 190], [92, 158, 214], [150, 192, 224], [225, 216, 190], [252, 214, 145]],
+          mtnBack: [114, 84, 62], mtnMid: [138, 100, 70],
+          soilTop: [98, 70, 48], soilMid: [76, 54, 35], soilBot: [48, 33, 22],
+          horizonLine: [212, 176, 134], dashColor: [178, 144, 106]
+        },
+        {
+          p: 1.00, name: 'Sunset', weather: 'Golden Dusk', night: 0.18,
+          sky: [[18, 23, 34], [27, 34, 48], [59, 55, 64], [140, 85, 59], [207, 118, 54], [235, 159, 74]],
+          mtnBack: [60, 46, 38], mtnMid: [76, 58, 46],
+          soilTop: [54, 41, 31], soilMid: [39, 30, 22], soilBot: [24, 18, 13],
+          horizonLine: [158, 132, 107], dashColor: [126, 105, 84]
+        }
+      ];
+
+      function getInterpolatedPalette(progress) {
+        const p = ((progress % 1) + 1) % 1;
+        let k1 = SKY_KEYFRAMES[0];
+        let k2 = SKY_KEYFRAMES[1];
+        for (let i = 0; i < SKY_KEYFRAMES.length - 1; i++) {
+          if (p >= SKY_KEYFRAMES[i].p && p <= SKY_KEYFRAMES[i + 1].p) {
+            k1 = SKY_KEYFRAMES[i];
+            k2 = SKY_KEYFRAMES[i + 1];
+            break;
+          }
+        }
+        const span = Math.max(0.0001, k2.p - k1.p);
+        const localT = (p - k1.p) / span;
+        const t = localT * localT * (3 - 2 * localT);
+
+        return {
+          name: localT < 0.5 ? k1.name : k2.name,
+          weather: localT < 0.5 ? k1.weather : k2.weather,
+          night: lerp(k1.night, k2.night, t),
+          sky: k1.sky.map((col, idx) => lerpRGB(col, k2.sky[idx], t)),
+          mtnBack: lerpRGB(k1.mtnBack, k2.mtnBack, t),
+          mtnMid: lerpRGB(k1.mtnMid, k2.mtnMid, t),
+          soilTop: lerpRGB(k1.soilTop, k2.soilTop, t),
+          soilMid: lerpRGB(k1.soilMid, k2.soilMid, t),
+          soilBot: lerpRGB(k1.soilBot, k2.soilBot, t),
+          horizonLine: lerpRGB(k1.horizonLine, k2.horizonLine, t),
+          dashColor: lerpRGB(k1.dashColor, k2.dashColor, t)
+        };
+      }
+
+      // ============================================================================
+      // 10 CHALLENGING ACHIEVEMENTS
+      // ============================================================================
+      const ACHIEVEMENT_DEFS = {
+        combo_100:          { icon: '🔥', title: 'Centurion Flow — Reached 100x Combo!' },
+        combo_200:          { icon: '👑', title: 'Unstoppable Legend — Reached 200x Combo!' },
+        score_50k:          { icon: '🏆', title: 'Trailblazer — Scored 50,000+ Points!' },
+        score_100k:         { icon: '💎', title: 'Grand Explorer — Scored 100,000+ Points!' },
+        full_cycle:         { icon: '🌍', title: 'Horizon Voyager — Completed Full Day–Night Cycle!' },
+        crate_destroyer_10: { icon: '⚡', title: 'Titan Breaker — Smashed 10 Crates in Spirit Dash!' },
+        star_hunter_3:      { icon: '🌠', title: 'Celestial Hunter — Caught 3 Shooting Stars!' },
+        spirit_master_3:    { icon: '💠', title: 'Blue-Flame Master — 3 Spirit Dashes in One Run!' },
+        close_call_15:      { icon: '🦅', title: 'Daredevil Reflexes — 15 Close Calls in One Run!' },
+        orb_collector_5:    { icon: '🏮', title: 'Lantern Guardian — Summoned 5 Firefly Orbs!' }
+      };
+
+      function showToast(icon, category, title, durationMs = 4800) {
+        toastIcon.textContent = icon;
+        toastCategory.textContent = category;
+        toastTitle.textContent = title;
+        achievementToast.classList.remove('opacity-0', '-translate-y-4');
+        achievementToast.classList.add('opacity-100', 'translate-y-0');
+
+        if (toastTimeout) clearTimeout(toastTimeout);
+        toastTimeout = setTimeout(() => {
+          achievementToast.classList.remove('opacity-100', 'translate-y-0');
+          achievementToast.classList.add('opacity-0', '-translate-y-4');
+        }, durationMs);
+      }
+
+      function unlockAchievement(id) {
+        if (unlockedAchievements[id]) return;
+        const def = ACHIEVEMENT_DEFS[id];
+        if (!def) return;
+
+        unlockedAchievements[id] = true;
+        saveAchievements(unlockedAchievements);
+        sound.playAchievementFanfare();
+        showToast(def.icon, 'Big Achievement Unlocked!', def.title, 4800);
+      }
+
+      function updateTrailButtonUI() {
+        const skin = TRAIL_SKINS.find(s => s.id === currentTrailSkin) || TRAIL_SKINS[0];
+        trailNameLabel.textContent = `Trail: ${skin.name}`;
+        trailSwatch.style.backgroundColor = skin.swatch;
+        trailSwatch.style.boxShadow = `0 0 8px ${skin.shadow}`;
+      }
+
+      function cycleTrailSkin() {
+        const idx = TRAIL_SKINS.findIndex(s => s.id === currentTrailSkin);
+        const nextSkin = TRAIL_SKINS[(idx + 1) % TRAIL_SKINS.length];
+        currentTrailSkin = nextSkin.id;
+        saveTrailSkin(currentTrailSkin);
+        updateTrailButtonUI();
+        showToast('✨', 'Cosmetic Trail Active', `${nextSkin.name} Trail Equipped`);
+      }
+
+      updateTrailButtonUI();
+
+      // ============================================================================
+      // PLAYER (FOX WITH EXPLORER BACKPACK)
+      // ============================================================================
+      const fox = {
+        x: 220,
+        y: 0,
+        vy: 0,
+        width: 96,
+        height: 62,
+        normalHeight: 62,
+        slideHeight: 30,
+        onGround: true,
+        isSliding: false,
+        slideTimer: 0,
+        runCycle: 0,
+        pitchAngle: 0,
+        scaleX: 1,
+        scaleY: 1,
+        stumbleTimer: 0,
+        fellInPit: false,
+        dustTimer: 0,
+
+        reset() {
+          this.x = Math.max(130, Math.min(260, width * 0.19));
+          this.y = groundY;
+          this.vy = 0;
+          this.onGround = true;
+          this.isSliding = false;
+          this.slideTimer = 0;
+          this.pitchAngle = 0;
+          this.scaleX = 1;
+          this.scaleY = 1;
+          this.stumbleTimer = 0;
+          this.fellInPit = false;
+          this.runCycle = 0;
+        },
+
+        getHitbox() {
+          const currentH = this.isSliding ? this.slideHeight : this.normalHeight;
+          const hbWidth = this.isSliding ? 72 : 64;
+          return {
+            x: this.x - hbWidth * 0.45,
+            y: this.y - currentH,
+            width: hbWidth,
+            height: currentH - 4
+          };
+        }
+      };
+
+      function initScenery() {
+        mountainLayers = [
+          {
+            speedMultiplier: 0.12,
+            offset: 0,
+            segmentWidth: 220,
+            peaks: [85, 125, 70, 140, 90, 115, 65, 130, 80, 110, 75, 135]
+          },
+          {
+            speedMultiplier: 0.28,
+            offset: 0,
+            segmentWidth: 180,
+            peaks: [48, 82, 38, 95, 52, 74, 42, 88, 55, 78, 45, 92]
+          }
+        ];
+
+        stars = [];
+        for (let i = 0; i < 65; i++) {
+          stars.push({
+            xRatio: Math.random(),
+            yRatio: 0.04 + Math.random() * 0.62,
+            r: 0.8 + Math.random() * 1.8,
+            twinkleSpd: 2.0 + Math.random() * 4.0,
+            phase: Math.random() * Math.PI * 2
+          });
+        }
+
+        groundDashes = [];
+        const dashSpacing = 74;
+        const count = Math.ceil(width / dashSpacing) + 4;
+        for (let i = 0; i < count; i++) {
+          groundDashes.push({
+            x: i * dashSpacing,
+            w: 28 + (i % 3) * 4
+          });
+        }
+
+        groundPebbles = [];
+        for (let i = 0; i < 45; i++) {
+          groundPebbles.push({
+            x: Math.random() * width,
+            yOffset: 10 + Math.random() * 48,
+            r: 1 + Math.random() * 2.2,
+            isLight: Math.random() > 0.5
+          });
+        }
+      }
+
+      function resizeCanvas() {
+        width = window.innerWidth;
+        height = window.innerHeight;
+        dpr = Math.min(window.devicePixelRatio || 1, 2);
+
+        canvas.width = Math.floor(width * dpr);
+        canvas.height = Math.floor(height * dpr);
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+        const prevGroundY = groundY;
+        groundY = Math.floor(height * 0.82);
+
+        fox.x = Math.max(115, Math.min(255, width * 0.18));
+        if (fox.onGround && !fox.fellInPit) {
+          fox.y = groundY;
+        } else {
+          fox.y += (groundY - prevGroundY);
+        }
+
+        controlsHint.style.bottom = `${Math.max(19, Math.round(((height - groundY) / height) * 100 + 3.5))}%`;
+
+        if (groundDashes.length === 0) {
+          initScenery();
+        }
+      }
+
+      window.addEventListener('resize', resizeCanvas);
+
+      // ============================================================================
+      // PROCEDURAL OBSTACLE & COLLECTIBLE GENERATOR
+      // ============================================================================
+      function spawnNextPattern() {
+        const spawnX = width + 140;
+        const difficulty = paceRatio;
+        const roll = Math.random();
+
+        if (roll < 0.34) {
+          const crateW = 70;
+          const crateH = 68;
+          obstacles.push({
+            type: 'CRATE',
+            x: spawnX,
+            y: groundY - crateH,
+            width: crateW,
+            height: crateH,
+            passed: false,
+            closeChecked: false
+          });
+
+          const subRoll = Math.random();
+          if (subRoll < 0.45) {
+            collectibles.push(
+              { type: 'COIN', x: spawnX - 48, y: groundY - crateH - 48, r: 17, collected: false, phase: 0 },
+              { type: 'COIN', x: spawnX + 35, y: groundY - crateH - 72, r: 17, collected: false, phase: 1 },
+              { type: 'COIN', x: spawnX + 118, y: groundY - crateH - 48, r: 17, collected: false, phase: 2 }
+            );
+          } else if (subRoll < 0.78) {
+            collectibles.push(
+              { type: 'COIN', x: spawnX + crateW * 0.5, y: groundY - crateH - 64, r: 17, collected: false, phase: 0 }
+            );
+          } else {
+            collectibles.push(
+              { type: 'PEG', x: spawnX - 18, y: groundY - crateH - 48, r: 13, collected: false, phase: 0 },
+              { type: 'PEG', x: spawnX + 35, y: groundY - crateH - 72, r: 13, collected: false, phase: 1 },
+              { type: 'PEG', x: spawnX + 88, y: groundY - crateH - 48, r: 13, collected: false, phase: 2 }
+            );
+          }
+        } else if (roll < 0.64) {
+          const pillarW = 46;
+          const clearanceGap = 54;
+          obstacles.push({
+            type: 'PILLAR',
+            x: spawnX,
+            y: 0,
+            width: pillarW,
+            height: groundY - clearanceGap,
+            passed: false,
+            closeChecked: false
+          });
+
+          if (Math.random() < 0.5) {
+            collectibles.push(
+              { type: 'COIN', x: spawnX + pillarW * 0.5, y: groundY - 25, r: 17, collected: false, phase: 0 }
+            );
+          } else {
+            collectibles.push(
+              { type: 'PEG', x: spawnX - 42, y: groundY - 20, r: 13, collected: false, phase: 0 },
+              { type: 'PEG', x: spawnX + pillarW * 0.5, y: groundY - 20, r: 13, collected: false, phase: 1 },
+              { type: 'PEG', x: spawnX + pillarW + 42, y: groundY - 20, r: 13, collected: false, phase: 2 }
+            );
+          }
+        } else if (roll < 0.82) {
+          const pitW = 110 + Math.floor(difficulty * 25);
+          obstacles.push({
+            type: 'PIT',
+            x: spawnX,
+            y: groundY,
+            width: pitW,
+            height: height - groundY + 40,
+            passed: false,
+            closeChecked: false
+          });
+
+          if (Math.random() < 0.65) {
+            collectibles.push(
+              { type: 'COIN', x: spawnX + pitW * 0.08, y: groundY - 96, r: 17, collected: false, phase: 0 },
+              { type: 'COIN', x: spawnX + pitW * 0.5, y: groundY - 126, r: 17, collected: false, phase: 1 },
+              { type: 'COIN', x: spawnX + pitW * 0.92, y: groundY - 96, r: 17, collected: false, phase: 2 }
+            );
+          } else {
+            collectibles.push(
+              { type: 'PEG', x: spawnX + pitW + 90, y: groundY - 92, r: 13, collected: false, phase: 0 },
+              { type: 'PEG', x: spawnX + pitW + 140, y: groundY - 122, r: 13, collected: false, phase: 1 },
+              { type: 'PEG', x: spawnX + pitW + 190, y: groundY - 92, r: 13, collected: false, phase: 2 }
+            );
+          }
+        } else {
+          const isGroundPegs = Math.random() < 0.55;
+          if (isGroundPegs) {
+            for (let i = 0; i < 4; i++) {
+              collectibles.push({
+                type: 'PEG',
+                x: spawnX + i * 62,
+                y: groundY - 22 - (i % 2) * 18,
+                r: 13,
+                collected: false,
+                phase: i
+              });
+            }
+          } else {
+            for (let i = 0; i < 3; i++) {
+              collectibles.push({
+                type: 'COIN',
+                x: spawnX + i * 66,
+                y: groundY - 90 - (i === 1 ? 28 : 0),
+                r: 17,
+                collected: false,
+                phase: i
+              });
+            }
+          }
+
+          const crateOffset = 520;
+          obstacles.push({
+            type: 'CRATE',
+            x: spawnX + crateOffset,
+            y: groundY - 68,
+            width: 70,
+            height: 68,
+            passed: false,
+            closeChecked: false
+          });
+
+          collectibles.push({
+            type: 'COIN',
+            x: spawnX + crateOffset + 35,
+            y: groundY - 68 - 64,
+            r: 17,
+            collected: false,
+            phase: 1
+          });
+
+          nextSpawnDistance += 460;
+        }
+
+        if (Math.random() < 0.22 && fireflyTimer <= 1.0) {
+          collectibles.push({
+            type: 'ORB',
+            x: spawnX + 250,
+            y: groundY - 95,
+            r: 20,
+            collected: false,
+            phase: 0
+          });
+        }
+
+        const minGap = 620 + difficulty * 110;
+        const maxGap = 920 + difficulty * 160;
+        nextSpawnDistance += minGap + Math.random() * (maxGap - minGap);
+      }
+
+      // ============================================================================
+      // HUD UPDATES, 70-COMBO SPIRIT DASH & COMBO LOGIC
+      // ============================================================================
+      function addSpiritEnergy(amount) {
+        if (spiritDashTimer > 0) return;
+        const prev = spiritEnergy;
+        spiritEnergy = Math.min(SPIRIT_MAX, spiritEnergy + amount);
+        if (prev < SPIRIT_MAX && spiritEnergy >= SPIRIT_MAX) {
+          spawnScorePopup(fox.x, fox.y - 84, 'SPIRIT READY! (Shift)', '#38bdf8', 1.12);
+        }
+      }
+
+      function triggerSpiritDash() {
+        if (gameState !== 'PLAYING') return;
+        if (spiritEnergy < SPIRIT_MAX || spiritDashTimer > 0) return;
+
+        sound.init();
+        spiritEnergy = 0;
+        spiritDashTimer = SPIRIT_DASH_DURATION;
+        spiritDashesUsed++;
+        if (spiritDashesUsed >= 3) {
+          unlockAchievement('spirit_master_3');
+        }
+        sound.playSpiritDash();
+
+        shakeTime = 0.22;
+        shakeMagnitude = 6;
+        spawnSparkBurst(fox.x + 20, fox.y - 34, '#38bdf8', 22);
+        spawnScorePopup(fox.x, fox.y - 78, 'SPIRIT FOX DASH!', '#7dd3fc', 1.25);
+      }
+
+      function incrementCombo(amount = 1) {
+        combo += amount;
+        if (combo > maxCombo) {
+          maxCombo = combo;
+        }
+
+        addSpiritEnergy(amount);
+
+        if (combo >= 100) unlockAchievement('combo_100');
+        if (combo >= 200) unlockAchievement('combo_200');
+
+        if (combo >= 2) {
+          comboCard.classList.remove('opacity-0', 'translate-y-1');
+          comboDisplay.textContent = `x${combo}`;
+          comboCard.classList.remove('combo-pop');
+          void comboCard.offsetWidth;
+          comboCard.classList.add('combo-pop');
+        }
+      }
+
+      function updateHUD(palette) {
+        const displayScore = Math.floor(score);
+        scoreDisplay.textContent = displayScore;
+
+        if (displayScore >= 50000) unlockAchievement('score_50k');
+        if (displayScore >= 100000) unlockAchievement('score_100k');
+
+        if (displayScore > bestScore) {
+          bestScore = displayScore;
+          isNewHighScore = true;
+        }
+        bestScoreDisplay.textContent = bestScore;
+
+        const barPercent = Math.min(100, Math.max(10, Math.round(paceRatio * 100)));
+        paceBarFill.style.width = `${barPercent}%`;
+
+        if (spiritDashTimer > 0) {
+          const dashPct = Math.max(0, Math.round((spiritDashTimer / SPIRIT_DASH_DURATION) * 100));
+          spiritBarFill.style.width = `${dashPct}%`;
+          spiritLabel.textContent = 'SPIRIT DASH';
+          spiritStatusText.textContent = 'ACTIVE!';
+          spiritStatusText.className = 'text-sky-300 font-extrabold tabular-nums animate-pulse';
+          spiritBarTrack.classList.add('spirit-ready');
+          dashBtn.classList.add('ready');
+          dashBtn.classList.remove('opacity-60');
+        } else {
+          const spiritPct = Math.min(100, Math.round((spiritEnergy / SPIRIT_MAX) * 100));
+          spiritBarFill.style.width = `${spiritPct}%`;
+          spiritLabel.textContent = 'SPIRIT';
+          if (spiritEnergy >= SPIRIT_MAX) {
+            spiritStatusText.textContent = 'READY!';
+            spiritStatusText.className = 'text-sky-300 font-extrabold tabular-nums';
+            spiritBarTrack.classList.add('spirit-ready');
+            dashBtn.classList.add('ready');
+            dashBtn.classList.remove('opacity-60');
+          } else {
+            spiritStatusText.textContent = `${Math.floor(spiritEnergy)}/${SPIRIT_MAX}`;
+            spiritStatusText.className = 'text-slate-400 tabular-nums';
+            spiritBarTrack.classList.remove('spirit-ready');
+            dashBtn.classList.remove('ready');
+            dashBtn.classList.add('opacity-60');
+          }
+        }
+
+        if (fireflyTimer > 0) {
+          fireflyHudRow.classList.remove('hidden');
+          fireflyHudRow.classList.add('flex');
+          boost2xBadge.classList.remove('hidden');
+          fireflyTimerText.textContent = `${fireflyTimer.toFixed(1)}s`;
+        } else {
+          fireflyHudRow.classList.add('hidden');
+          fireflyHudRow.classList.remove('flex');
+          boost2xBadge.classList.add('hidden');
+        }
+
+        const paletteName = palette ? palette.name : null;
+        if (palette && weatherSubLabel.textContent !== palette.weather) {
+          weatherSubLabel.textContent = palette.weather;
+        }
+
+        if (paletteName && phaseLabel.textContent !== paletteName) {
+          phaseLabel.textContent = paletteName;
+          if (paletteName === 'Night') {
+            phaseBadge.className = 'flex items-center justify-between gap-1.5 mt-2 pt-2 border-t border-white/10 text-[11px] font-semibold text-sky-300 tracking-wide transition-colors duration-300';
+            phaseDot.className = 'w-2 h-2 rounded-full bg-sky-400 shadow-[0_0_8px_#38bdf8]';
+          } else if (paletteName === 'Dawn') {
+            phaseBadge.className = 'flex items-center justify-between gap-1.5 mt-2 pt-2 border-t border-white/10 text-[11px] font-semibold text-rose-300 tracking-wide transition-colors duration-300';
+            phaseDot.className = 'w-2 h-2 rounded-full bg-rose-400 shadow-[0_0_8px_#fb7185]';
+          } else if (paletteName === 'Day') {
+            phaseBadge.className = 'flex items-center justify-between gap-1.5 mt-2 pt-2 border-t border-white/10 text-[11px] font-semibold text-yellow-200 tracking-wide transition-colors duration-300';
+            phaseDot.className = 'w-2 h-2 rounded-full bg-yellow-300 shadow-[0_0_8px_#fde047]';
+          } else {
+            phaseBadge.className = 'flex items-center justify-between gap-1.5 mt-2 pt-2 border-t border-white/10 text-[11px] font-semibold text-amber-300/90 tracking-wide transition-colors duration-300';
+            phaseDot.className = 'w-2 h-2 rounded-full bg-amber-400 shadow-[0_0_8px_#fbbf24]';
+          }
+        }
+      }
+
+      function spawnDust(x, y, count = 5, scale = 1, color = '#bfa082') {
+        for (let i = 0; i < count; i++) {
+          particles.push({
+            type: 'CIRCLE',
+            x: x + (Math.random() - 0.5) * 16,
+            y: y - Math.random() * 6,
+            vx: -currentSpeed * (0.22 + Math.random() * 0.25) - Math.random() * 45,
+            vy: -18 - Math.random() * 55,
+            size: (2.2 + Math.random() * 3.4) * scale,
+            alpha: 0.55 + Math.random() * 0.3,
+            decay: 1.3 + Math.random() * 0.9,
+            color
+          });
+        }
+      }
+
+      function spawnTrailParticles(x, y) {
+        if (spiritDashTimer > 0) {
+          for (let i = 0; i < 2; i++) {
+            particles.push({
+              type: 'EMBER',
+              x: x - 20 + (Math.random() - 0.5) * 16,
+              y: y - 16 + (Math.random() - 0.5) * 24,
+              vx: -currentSpeed * 0.45 - Math.random() * 80,
+              vy: -25 + (Math.random() - 0.5) * 50,
+              size: 3.5 + Math.random() * 4.5,
+              alpha: 0.95,
+              decay: 2.1,
+              color: Math.random() > 0.4 ? '#38bdf8' : '#e0f2fe'
+            });
+          }
+          return;
+        }
+
+        if (currentTrailSkin === 'EMBERS') {
+          particles.push({
+            type: 'EMBER',
+            x: x - 28 + (Math.random() - 0.5) * 10,
+            y: y - 12 - Math.random() * 18,
+            vx: -currentSpeed * 0.3 - Math.random() * 40,
+            vy: -22 - Math.random() * 45,
+            size: 2.5 + Math.random() * 3.2,
+            alpha: 0.95,
+            decay: 1.6 + Math.random() * 0.7,
+            color: Math.random() > 0.35 ? '#fb923c' : '#fde047'
+          });
+        } else if (currentTrailSkin === 'SAKURA') {
+          particles.push({
+            type: 'PETAL',
+            x: x - 28 + (Math.random() - 0.5) * 12,
+            y: y - 16 - Math.random() * 20,
+            vx: -currentSpeed * 0.28 - Math.random() * 35,
+            vy: -10 + Math.random() * 35,
+            size: 4.0 + Math.random() * 2.5,
+            rot: Math.random() * Math.PI * 2,
+            vRot: (Math.random() - 0.5) * 8,
+            alpha: 0.92,
+            decay: 1.15 + Math.random() * 0.5,
+            color: Math.random() > 0.3 ? '#f472b6' : '#fbcfe8'
+          });
+        } else if (currentTrailSkin === 'DUST') {
+          spawnDust(x - 26, y, 1, 0.75, '#bfa082');
+        }
+      }
+
+      function spawnSparkBurst(x, y, color = '#ff9d3b', count = 10) {
+        for (let i = 0; i < count; i++) {
+          const angle = (Math.PI * 2 * i) / count + (Math.random() - 0.5) * 0.4;
+          const speed = 55 + Math.random() * 130;
+          particles.push({
+            type: 'CIRCLE',
+            x,
+            y,
+            vx: Math.cos(angle) * speed - currentSpeed * 0.15,
+            vy: Math.sin(angle) * speed - 20,
+            size: 2.0 + Math.random() * 2.8,
+            alpha: 0.95,
+            decay: 1.8 + Math.random() * 0.8,
+            color
+          });
+        }
+      }
+
+      function spawnScorePopup(x, y, text, color = '#ffffff', scale = 1.0) {
+        popups.push({
+          x,
+          y,
+          vx: -currentSpeed * 0.14,
+          vy: -48,
+          text,
+          color,
+          scale,
+          alpha: 1,
+          life: 0,
+          maxLife: 0.78
+        });
+      }
+
+      function checkShootingStarCatch() {
+        for (const st of shootingStars) {
+          if (!st.caught && st.alpha > 0.2) {
+            st.caught = true;
+            starsCaughtCount++;
+            const bonus = 500 * (fireflyTimer > 0 ? 2 : 1);
+            score += bonus;
+            incrementCombo(2);
+            if (starsCaughtCount >= 3) {
+              unlockAchievement('star_hunter_3');
+            }
+            sound.playStarCatch();
+            spawnSparkBurst(st.x, st.y, '#fef08a', 18);
+            spawnScorePopup(fox.x, fox.y - 88, `Star Catch +${bonus}!`, '#fde047', 1.22);
+            break;
+          }
+        }
+      }
+
+      function executeJump() {
+        fox.vy = JUMP_VELOCITY;
+        fox.onGround = false;
+        fox.isSliding = false;
+        fox.slideTimer = 0;
+        input.slideHeld = false;
+        input.slideQueued = false;
+        slideBtn.classList.remove('active');
+
+        fox.scaleX = 0.88;
+        fox.scaleY = 1.15;
+        fox.pitchAngle = -0.35;
+
+        spawnDust(fox.x - 16, groundY, 9, 1.2, '#cfa782');
+        sound.playJump();
+        checkShootingStarCatch();
+      }
+
+      function startGameFromLanding() {
+        if (gameState !== 'START') return;
+        sound.init();
+        startModal.classList.add('opacity-0', 'pointer-events-none');
+        startCard.classList.remove('scale-100');
+        startCard.classList.add('scale-95');
+        resetGame();
+      }
+
+      function togglePause() {
+        if (gameState === 'PLAYING') {
+          gameState = 'PAUSED';
+          pauseModal.classList.remove('opacity-0', 'pointer-events-none');
+        } else if (gameState === 'PAUSED') {
+          gameState = 'PLAYING';
+          pauseModal.classList.add('opacity-0', 'pointer-events-none');
+        }
+      }
+
+      function triggerJumpInput() {
+        if (gameState === 'START') {
+          startGameFromLanding();
+          return;
+        }
+        if (gameState === 'PAUSED') return;
+        if (gameState === 'GAMEOVER') {
+          if (performance.now() - gameOverTimestamp > 350) {
+            resetGame();
+          }
+          return;
+        }
+
+        sound.init();
+        controlsHint.style.opacity = '0';
+
+        if (fox.onGround && !fox.fellInPit) {
+          executeJump();
+        } else {
+          input.jumpBufferTimer = 0.16;
+        }
+      }
+
+      function triggerOneTapSlide(isHeldSource = false) {
+        if (gameState !== 'PLAYING') return;
+
+        sound.init();
+        controlsHint.style.opacity = '0';
+
+        if (isHeldSource) {
+          input.slideHeld = true;
+        }
+        slideBtn.classList.add('active');
+
+        if (fox.onGround && !fox.fellInPit) {
+          if (!fox.isSliding) {
+            fox.scaleX = 1.14;
+            fox.scaleY = 0.84;
+            spawnDust(fox.x + 10, groundY, 6, 0.9, '#c69f79');
+            sound.playSlide();
+          }
+          fox.isSliding = true;
+          fox.slideTimer = Math.max(fox.slideTimer, SLIDE_MIN_DURATION);
+        } else {
+          input.slideQueued = true;
+        }
+      }
+
+      function releaseSlideHold() {
+        input.slideHeld = false;
+      }
+
+      // ============================================================================
+      // INPUT LISTENERS
+      // ============================================================================
+      window.addEventListener('keydown', (e) => {
+        if (e.code === 'KeyP' || e.code === 'Escape') {
+          e.preventDefault();
+          if (gameState === 'PLAYING' || gameState === 'PAUSED') {
+            togglePause();
+          }
+          return;
+        }
+        if (gameState === 'PAUSED') return;
+
+        if (e.code === 'Space' || e.code === 'ArrowUp' || e.code === 'KeyW') {
+          e.preventDefault();
+          if (!e.repeat) {
+            triggerJumpInput();
+          }
+        } else if (e.code === 'ArrowDown' || e.code === 'KeyS') {
+          e.preventDefault();
+          triggerOneTapSlide(true);
+        } else if (e.code === 'ShiftLeft' || e.code === 'ShiftRight' || e.code === 'KeyE') {
+          e.preventDefault();
+          triggerSpiritDash();
+        }
+      });
+
+      window.addEventListener('keyup', (e) => {
+        if (e.code === 'ArrowDown' || e.code === 'KeyS') {
+          e.preventDefault();
+          releaseSlideHold();
+        }
+      });
+
+      pauseBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        togglePause();
+        pauseBtn.blur();
+      });
+
+      resumeBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        togglePause();
+      });
+
+      pauseRestartBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        pauseModal.classList.add('opacity-0', 'pointer-events-none');
+        resetGame();
+      });
+
+      dashBtn.addEventListener('pointerdown', (e) => {
+        e.stopPropagation();
+        e.preventDefault();
+        triggerSpiritDash();
+      });
+
+      trailSelectBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        cycleTrailSkin();
+        trailSelectBtn.blur();
+      });
+
+      slideBtn.addEventListener('pointerdown', (e) => {
+        e.stopPropagation();
+        e.preventDefault();
+        triggerOneTapSlide(true);
+      });
+
+      window.addEventListener('pointerup', () => {
+        if (input.slideHeld) {
+          releaseSlideHold();
+        }
+      });
+
+      slideBtn.addEventListener('pointercancel', () => releaseSlideHold());
+
+      soundToggleBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        sound.toggleMute();
+        soundToggleBtn.blur();
+      });
+
+      restartBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        resetGame();
+      });
+
+      startRunBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        startGameFromLanding();
+      });
+
+      // Share Score Card button (Copies formatted summary to clipboard with safe fallback)
+      shareScoreBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const unlockedCount = Object.keys(unlockedAchievements).length;
+        const shareText = `🦊 Sunset Trail Runner — Score: ${Math.floor(score)} | Max Combo: x${maxCombo} | Achievements: ${unlockedCount}/10`;
+        
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(shareText).then(() => {
+            shareBtnText.textContent = 'Copied to Clipboard! ✨';
+            setTimeout(() => { shareBtnText.textContent = 'Copy Shareable Score Card'; }, 2200);
+          }).catch(() => {
+            fallbackCopy(shareText);
+          });
+        } else {
+          fallbackCopy(shareText);
+        }
+      });
+
+      function fallbackCopy(text) {
+        const ta = document.createElement('textarea');
+        ta.value = text;
+        ta.style.position = 'fixed';
+        ta.style.top = '0';
+        ta.style.left = '0';
+        ta.style.opacity = '0';
+        document.body.appendChild(ta);
+        ta.focus();
+        ta.select();
+        try {
+          const successful = document.execCommand('copy');
+          if (successful) {
+            shareBtnText.textContent = 'Copied to Clipboard! ✨';
+            setTimeout(() => { shareBtnText.textContent = 'Copy Shareable Score Card'; }, 2200);
+          } else {
+            shareBtnText.textContent = 'Press Ctrl+C to Copy';
+            setTimeout(() => { shareBtnText.textContent = 'Copy Shareable Score Card'; }, 2200);
+          }
+        } catch (err) {
+          shareBtnText.textContent = 'Copy failed';
+          setTimeout(() => { shareBtnText.textContent = 'Copy Shareable Score Card'; }, 2200);
+        }
+        document.body.removeChild(ta);
+      }
+
+      canvas.addEventListener('pointerdown', (e) => {
+        if (gameState === 'GAMEOVER') {
+          if (performance.now() - gameOverTimestamp > 350) {
+            resetGame();
+          }
+          return;
+        }
+        if (gameState === 'PAUSED') return;
+
+        const now = performance.now();
+        if (now - input.lastTapTime < 260 && spiritEnergy >= SPIRIT_MAX && spiritDashTimer <= 0) {
+          triggerSpiritDash();
+        }
+        input.lastTapTime = now;
+
+        input.touchStartY = e.clientY;
+        input.touchStartX = e.clientX;
+        input.swipedDownThisTouch = false;
+      });
+
+      canvas.addEventListener('pointermove', (e) => {
+        if (input.touchStartY !== null && gameState === 'PLAYING') {
+          const dy = e.clientY - input.touchStartY;
+          if (dy > 26 && !input.swipedDownThisTouch) {
+            input.swipedDownThisTouch = true;
+            triggerOneTapSlide(false);
+          }
+        }
+      });
+
+      canvas.addEventListener('pointerup', (e) => {
+        if (gameState === 'PLAYING' && input.touchStartY !== null && !input.swipedDownThisTouch) {
+          triggerJumpInput();
+        }
+        input.touchStartY = null;
+        input.touchStartX = null;
+        input.swipedDownThisTouch = false;
+      });
+
+      // ============================================================================
+      // GAME OVER & RESET FLOW
+      // ============================================================================
+      function triggerGameOver(fellInPit = false) {
+        if (gameState === 'GAMEOVER') return;
+        gameState = 'GAMEOVER';
+        gameOverTimestamp = performance.now();
+        fox.fellInPit = fellInPit;
+        fox.stumbleTimer = 1.0;
+
+        input.slideHeld = false;
+        input.slideQueued = false;
+        fox.slideTimer = 0;
+        slideBtn.classList.remove('active');
+        sound.playCollision();
+
+        shakeTime = 0.32;
+        shakeMagnitude = 11;
+        spawnSparkBurst(fox.x + 20, fox.y - 28, '#ff6b35', 18);
+        spawnDust(fox.x, fox.y, 14, 1.4, '#d6b08c');
+
+        const finalScore = Math.floor(score);
+        if (finalScore >= bestScore && finalScore > 0) {
+          bestScore = finalScore;
+          isNewHighScore = true;
+        }
+        saveBestScore(bestScore);
+        updateHUD();
+
+        paceContainer.classList.add('opacity-0');
+        spiritContainer.classList.add('opacity-0');
+        comboCard.classList.add('opacity-0', 'translate-y-1');
+        slideBtn.classList.add('opacity-0', 'pointer-events-none');
+        dashBtn.classList.add('opacity-0', 'pointer-events-none');
+
+        finalScoreText.textContent = finalScore;
+        finalComboText.textContent = `x${Math.max(1, maxCombo)}`;
+        highScoreLabel.textContent = isNewHighScore ? 'New high score' : 'High score';
+        finalHighScoreText.textContent = bestScore;
+        const unlockedCount = Object.keys(unlockedAchievements).length;
+        finalAchievementsText.textContent = `${unlockedCount} / ${Object.keys(ACHIEVEMENT_DEFS).length}`;
+
+        gameOverModal.classList.remove('opacity-0', 'pointer-events-none');
+        gameOverCard.classList.remove('scale-95');
+        gameOverCard.classList.add('scale-100');
+      }
+
+      function initLandingScreen() {
+        gameState = 'START';
+        score = 0;
+        combo = 0;
+        elapsedTime = 0;
+        currentSpeed = BASE_SPEED * 0.75;
+        paceRatio = 0.08;
+        cycleProgress = 0;
+        nightFactor = 0.18;
+        spiritEnergy = 0;
+        spiritDashTimer = 0;
+        fireflyTimer = 0;
+        obstacles = [];
+        collectibles = [];
+        particles = [];
+        popups = [];
+        fox.reset();
+        controlsHint.style.opacity = '0';
+        slideBtn.classList.add('opacity-0', 'pointer-events-none');
+        dashBtn.classList.add('opacity-0', 'pointer-events-none');
+        updateHUD(getInterpolatedPalette(0));
+      }
+
+      function resetGame() {
+        gameState = 'PLAYING';
+        score = 0;
+        combo = 0;
+        maxCombo = 0;
+        elapsedTime = 0;
+        currentSpeed = BASE_SPEED;
+        paceRatio = 0.08;
+        cycleProgress = 0;
+        nightFactor = 0.18;
+        spiritEnergy = 0;
+        spiritDashTimer = 0;
+        fireflyTimer = 0;
+        spiritDashesUsed = 0;
+        closeCallsCount = 0;
+        shootingStars = [];
+        auroraPoints = [];
+        isNewHighScore = false;
+        nextSpawnDistance = 550;
+
+        input.slideHeld = false;
+        input.slideQueued = false;
+        slideBtn.classList.remove('active');
+
+        obstacles = [];
+        collectibles = [];
+        particles = [];
+        popups = [];
+
+        fox.reset();
+
+        controlsHint.style.opacity = '1';
+        paceContainer.classList.remove('opacity-0');
+        spiritContainer.classList.remove('opacity-0');
+        comboCard.classList.add('opacity-0', 'translate-y-1');
+        slideBtn.classList.remove('opacity-0', 'pointer-events-none');
+        dashBtn.classList.remove('opacity-0', 'pointer-events-none');
+        gameOverModal.classList.add('opacity-0', 'pointer-events-none');
+        gameOverCard.classList.remove('scale-100');
+        gameOverCard.classList.add('scale-95');
+        pauseModal.classList.add('opacity-0', 'pointer-events-none');
+
+        collectibles.push(
+          { type: 'PEG', x: fox.x + 280, y: groundY - 20, r: 13, collected: false, phase: 0 },
+          { type: 'PEG', x: fox.x + 355, y: groundY - 20, r: 13, collected: false, phase: 1 },
+          { type: 'PEG', x: fox.x + 430, y: groundY - 20, r: 13, collected: false, phase: 2 },
+          { type: 'ORB', x: fox.x + 535, y: groundY - 82, r: 20, collected: false, phase: 3 }
+        );
+
+        obstacles.push({
+          type: 'CRATE',
+          x: fox.x + 820,
+          y: groundY - 68,
+          width: 70,
+          height: 68,
+          passed: false,
+          closeChecked: false
+        });
+
+        collectibles.push(
+          { type: 'PEG', x: fox.x + 772, y: groundY - 116, r: 13, collected: false, phase: 0 },
+          { type: 'PEG', x: fox.x + 855, y: groundY - 140, r: 13, collected: false, phase: 1 },
+          { type: 'PEG', x: fox.x + 938, y: groundY - 116, r: 13, collected: false, phase: 2 }
+        );
+
+        nextSpawnDistance = 740;
+        updateHUD(getInterpolatedPalette(0));
+      }
+
+      // ============================================================================
+      // UPDATE & RENDER LOOP
+      // ============================================================================
+      function rectIntersect(a, b) {
+        return (
+          a.x < b.x + b.width &&
+          a.x + a.width > b.x &&
+          a.y < b.y + b.height &&
+          a.y + a.height > b.y
+        );
+      }
+
+      function update(dt) {
+        if (shakeTime > 0) {
+          shakeTime = Math.max(0, shakeTime - dt);
+        }
+
+        for (let i = particles.length - 1; i >= 0; i--) {
+          const p = particles[i];
+          p.x += p.vx * dt;
+          p.y += p.vy * dt;
+          if (p.rot !== undefined) {
+            p.rot += (p.vRot || 0) * dt;
+          }
+          p.alpha -= p.decay * dt;
+          if (p.alpha <= 0) {
+            particles.splice(i, 1);
+          }
+        }
+
+        for (let i = popups.length - 1; i >= 0; i--) {
+          const pop = popups[i];
+          pop.life += dt;
+          pop.x += pop.vx * dt;
+          pop.y += pop.vy * dt;
+          pop.alpha = Math.max(0, 1 - pop.life / pop.maxLife);
+          if (pop.life >= pop.maxLife) {
+            popups.splice(i, 1);
+          }
+        }
+
+        if (gameState === 'START') {
+          const previewStep = BASE_SPEED * 0.65 * dt;
+          for (const layer of mountainLayers) {
+            layer.offset = (layer.offset + previewStep * layer.speedMultiplier) % (layer.peaks.length * layer.segmentWidth);
+          }
+          for (const dash of groundDashes) {
+            dash.x -= previewStep;
+            if (dash.x + dash.w < 0) dash.x += groundDashes.length * 74;
+          }
+          for (const peb of groundPebbles) {
+            peb.x -= previewStep;
+            if (peb.x < -10) peb.x = width + Math.random() * 40;
+          }
+          fox.runCycle += dt * 9.5;
+          fox.dustTimer -= dt;
+          if (fox.dustTimer <= 0) {
+            spawnTrailParticles(fox.x, groundY);
+            fox.dustTimer = 0.06;
+          }
+          return;
+        }
+
+        if (gameState === 'PAUSED') return;
+
+        if (gameState !== 'PLAYING') {
+          if (fox.fellInPit && fox.y < groundY + 48) {
+            fox.vy += GRAVITY * dt;
+            fox.y = Math.min(groundY + 48, fox.y + fox.vy * dt);
+          }
+          return;
+        }
+
+        elapsedTime += dt;
+        paceRatio = Math.min(1, 0.08 + (elapsedTime / SPEED_RAMP_TIME) * 0.92);
+
+        if (spiritDashTimer > 0) {
+          spiritDashTimer = Math.max(0, spiritDashTimer - dt);
+        }
+        if (fireflyTimer > 0) {
+          fireflyTimer = Math.max(0, fireflyTimer - dt);
+          fireflyAngle += dt * 7.5;
+        }
+
+        const baseTargetSpeed = BASE_SPEED + (MAX_SPEED - BASE_SPEED) * Math.pow(paceRatio, 0.88);
+        currentSpeed = spiritDashTimer > 0 ? baseTargetSpeed * SPIRIT_SPEED_MULT : baseTargetSpeed;
+
+        cycleProgress = (elapsedTime / DAY_NIGHT_CYCLE_SECONDS) % 1;
+        if (elapsedTime >= DAY_NIGHT_CYCLE_SECONDS) {
+          unlockAchievement('full_cycle');
+        }
+        const currentPalette = getInterpolatedPalette(cycleProgress);
+        nightFactor = currentPalette.night;
+
+        const distStep = currentSpeed * dt;
+        const scoreMult = fireflyTimer > 0 ? 2.0 : 1.0;
+        score += distStep * (0.085 + combo * 0.008) * scoreMult;
+
+        if (currentTrailSkin === 'AURORA' || spiritDashTimer > 0) {
+          auroraPoints.unshift({
+            x: fox.x - 24,
+            y: fox.y - (fox.isSliding ? 15 : 28) + Math.sin(elapsedTime * 14) * 4,
+            alpha: 1.0
+          });
+        }
+        for (let i = auroraPoints.length - 1; i >= 0; i--) {
+          auroraPoints[i].x -= distStep * 0.85;
+          auroraPoints[i].alpha -= dt * 2.6;
+          if (auroraPoints[i].alpha <= 0 || auroraPoints.length > 26) {
+            auroraPoints.splice(i, 1);
+          }
+        }
+
+        if (nightFactor > 0.25) {
+          shootingStarCooldown -= dt;
+          if (shootingStarCooldown <= 0) {
+            shootingStarCooldown = 4.2 + Math.random() * 4.5;
+            shootingStars.push({
+              x: width * (0.55 + Math.random() * 0.4),
+              y: groundY * (0.08 + Math.random() * 0.22),
+              vx: -540 - Math.random() * 220,
+              vy: 140 + Math.random() * 90,
+              len: 85 + Math.random() * 45,
+              alpha: 1.0,
+              caught: false
+            });
+          }
+        }
+
+        for (let i = shootingStars.length - 1; i >= 0; i--) {
+          const st = shootingStars[i];
+          st.x += st.vx * dt;
+          st.y += st.vy * dt;
+          st.alpha -= dt * 0.85;
+          if (st.alpha <= 0 || st.x < -120) {
+            shootingStars.splice(i, 1);
+          }
+        }
+
+        for (const layer of mountainLayers) {
+          layer.offset = (layer.offset + distStep * layer.speedMultiplier) % (layer.peaks.length * layer.segmentWidth);
+        }
+
+        for (const dash of groundDashes) {
+          dash.x -= distStep;
+          if (dash.x + dash.w < 0) {
+            dash.x += groundDashes.length * 74;
+          }
+        }
+
+        for (const peb of groundPebbles) {
+          peb.x -= distStep;
+          if (peb.x < -10) {
+            peb.x = width + Math.random() * 40;
+            peb.yOffset = 10 + Math.random() * 48;
+          }
+        }
+
+        if (input.jumpBufferTimer > 0) {
+          input.jumpBufferTimer -= dt;
+        }
+
+        let overPit = null;
+        if (spiritDashTimer <= 0) {
+          for (const obs of obstacles) {
+            if (obs.type === 'PIT') {
+              if (fox.x - 14 > obs.x && fox.x + 14 < obs.x + obs.width) {
+                overPit = obs;
+                break;
+              }
+            }
+          }
+        }
+
+        let underOverheadPillar = false;
+        for (const obs of obstacles) {
+          if (obs.type === 'PILLAR') {
+            if (obs.x - 28 < fox.x + 34 && obs.x + obs.width + 24 > fox.x - 34) {
+              underOverheadPillar = true;
+              break;
+            }
+          }
+        }
+
+        if (input.slideHeld && fox.onGround) {
+          fox.slideTimer = Math.max(fox.slideTimer, 0.25);
+        } else if (fox.onGround && fox.slideTimer > 0) {
+          fox.slideTimer = Math.max(0, fox.slideTimer - dt);
+        }
+
+        if (fox.onGround && (fox.slideTimer > 0 || (fox.isSliding && underOverheadPillar))) {
+          fox.isSliding = true;
+          slideBtn.classList.add('active');
+        } else {
+          fox.isSliding = false;
+          if (!input.slideQueued && !input.slideHeld) {
+            slideBtn.classList.remove('active');
+          }
+        }
+
+        if (!fox.onGround || overPit) {
+          const gravMultiplier = (input.slideHeld || input.slideQueued) && fox.vy > -120 ? FAST_FALL_GRAVITY_MULT : 1.0;
+          fox.vy += GRAVITY * gravMultiplier * dt;
+          fox.y += fox.vy * dt;
+          fox.onGround = false;
+
+          const targetPitch = Math.max(-0.38, Math.min(0.32, fox.vy * 0.00045));
+          fox.pitchAngle += (targetPitch - fox.pitchAngle) * Math.min(1, dt * 12);
+
+          fox.dustTimer -= dt;
+          if (fox.dustTimer <= 0) {
+            spawnTrailParticles(fox.x, fox.y);
+            fox.dustTimer = 0.045;
+          }
+
+          if (!overPit && fox.y >= groundY) {
+            fox.y = groundY;
+            fox.vy = 0;
+            fox.onGround = true;
+            fox.pitchAngle = 0;
+
+            fox.scaleX = 1.18;
+            fox.scaleY = 0.80;
+            spawnDust(fox.x - 10, groundY, 8, 1.0, '#c69f79');
+            sound.playLand();
+
+            if (input.jumpBufferTimer > 0) {
+              input.jumpBufferTimer = 0;
+              executeJump();
+            } else if (input.slideQueued || input.slideHeld) {
+              input.slideQueued = false;
+              fox.isSliding = true;
+              fox.slideTimer = Math.max(fox.slideTimer, SLIDE_MIN_DURATION);
+              slideBtn.classList.add('active');
+              sound.playSlide();
+            }
+          } else if (overPit && fox.y > groundY + 18) {
+            triggerGameOver(true);
+            return;
+          }
+        } else {
+          fox.y = groundY;
+          fox.pitchAngle += (0 - fox.pitchAngle) * Math.min(1, dt * 14);
+          fox.runCycle += dt * (11.5 + paceRatio * 5.5 + (spiritDashTimer > 0 ? 6 : 0));
+
+          fox.dustTimer -= dt;
+          if (fox.dustTimer <= 0) {
+            spawnTrailParticles(fox.x, groundY);
+            fox.dustTimer = fox.isSliding ? 0.035 : 0.055;
+          }
+        }
+
+        fox.scaleX += (1 - fox.scaleX) * Math.min(1, dt * 14);
+        fox.scaleY += (1 - fox.scaleY) * Math.min(1, dt * 14);
+
+        nextSpawnDistance -= distStep;
+        if (nextSpawnDistance <= 0) {
+          spawnNextPattern();
+        }
+
+        const foxBox = fox.getHitbox();
+
+        for (let i = obstacles.length - 1; i >= 0; i--) {
+          const obs = obstacles[i];
+          obs.x -= distStep;
+
+          if (obs.type === 'CRATE' || obs.type === 'PILLAR') {
+            const obsBox = {
+              x: obs.x + 6,
+              y: obs.y + 4,
+              width: obs.width - 12,
+              height: obs.height - 8
+            };
+
+            if (rectIntersect(foxBox, obsBox)) {
+              if (spiritDashTimer > 0) {
+                if (obs.type === 'CRATE') {
+                  cratesSmashedCount++;
+                  if (cratesSmashedCount >= 10) {
+                    unlockAchievement('crate_destroyer_10');
+                  }
+                  incrementCombo(2);
+                  const smashBonus = Math.round((250 + combo * 15) * scoreMult);
+                  score += smashBonus;
+                  shakeTime = 0.16;
+                  shakeMagnitude = 7;
+                  sound.playCrateSmash();
+                  spawnSparkBurst(obs.x + obs.width * 0.5, obs.y + obs.height * 0.5, '#38bdf8', 16);
+                  spawnDust(obs.x + obs.width * 0.5, obs.y + obs.height * 0.5, 12, 1.35, '#a66838');
+                  spawnScorePopup(obs.x, obs.y - 12, `Smash +${smashBonus}!`, '#38bdf8', 1.18);
+                  obstacles.splice(i, 1);
+                  continue;
+                }
+              } else {
+                triggerGameOver(false);
+                return;
+              }
+            }
+
+            if (!obs.closeChecked && obs.x + obs.width < foxBox.x + foxBox.width * 0.6) {
+              obs.closeChecked = true;
+
+              if (obs.type === 'CRATE') {
+                const verticalClearance = obs.y - (foxBox.y + foxBox.height);
+                if (verticalClearance >= -4 && verticalClearance < 34) {
+                  incrementCombo(1);
+                  closeCallsCount++;
+                  if (closeCallsCount >= 15) unlockAchievement('close_call_15');
+                  const closeBonus = Math.round((36 + combo * 12) * scoreMult);
+                  score += closeBonus;
+                  spawnScorePopup(fox.x - 10, fox.y - 68, 'Close', '#ff8b3d', 1.08);
+                  sound.playCloseCall();
+                }
+              } else if (obs.type === 'PILLAR') {
+                incrementCombo(1);
+                closeCallsCount++;
+                if (closeCallsCount >= 15) unlockAchievement('close_call_15');
+                const slideBonus = Math.round((42 + combo * 12) * scoreMult);
+                score += slideBonus;
+                spawnScorePopup(fox.x + 10, fox.y - 42, `+${slideBonus}`, '#ffffff', 1.0);
+                sound.playPickup(combo);
+              }
+            }
+          }
+
+          if (obs.x + obs.width < -150) {
+            obstacles.splice(i, 1);
+          }
+        }
+
+        for (let i = collectibles.length - 1; i >= 0; i--) {
+          const item = collectibles[i];
+          item.x -= distStep;
+
+          if (!item.collected) {
+            const foxCenterX = foxBox.x + foxBox.width * 0.55;
+            const foxCenterY = foxBox.y + foxBox.height * 0.5;
+            const dx = foxCenterX - item.x;
+            const dy = foxCenterY - item.y;
+            const distSq = dx * dx + dy * dy;
+            const pickupRadius = item.r + 44;
+            const magnetRadius = (fireflyTimer > 0 || spiritDashTimer > 0) ? 310 : pickupRadius + 46;
+
+            if (distSq <= magnetRadius * magnetRadius && distSq > 1) {
+              const dist = Math.sqrt(distSq);
+              const pullSpeed = (fireflyTimer > 0 || spiritDashTimer > 0) ? 780 : 420;
+              const pullStrength = (1 - dist / magnetRadius) * pullSpeed * dt;
+              item.x += (dx / dist) * pullStrength;
+              item.y += (dy / dist) * pullStrength;
+            }
+
+            if (distSq <= pickupRadius * pickupRadius) {
+              item.collected = true;
+              incrementCombo(1);
+
+              if (item.type === 'ORB') {
+                fireflyTimer = FIREFLY_DURATION;
+                orbsCollectedCount++;
+                if (orbsCollectedCount >= 5) {
+                  unlockAchievement('orb_collector_5');
+                }
+                sound.playOrbPickup();
+                spawnSparkBurst(item.x, item.y, '#bef264', 18);
+                spawnScorePopup(item.x - 24, item.y - 18, 'Firefly 2x Magnet!', '#bef264', 1.16);
+              } else {
+                const pts = Math.round((30 + combo * 12) * scoreMult);
+                score += pts;
+
+                spawnScorePopup(
+                  item.x - 15,
+                  item.y - 12,
+                  `+${pts}`,
+                  fireflyTimer > 0 ? '#fde047' : '#f8fafc',
+                  fireflyTimer > 0 ? 1.08 : 1.0
+                );
+                spawnSparkBurst(item.x, item.y, fireflyTimer > 0 ? '#bef264' : '#ff9d3b', 8);
+                sound.playPickup(combo);
+              }
+            }
+          }
+
+          if (item.x < -80 || item.collected) {
+            collectibles.splice(i, 1);
+          }
+        }
+
+        updateHUD(currentPalette);
+      }
+
+      // ============================================================================
+      // RENDERING PIPELINE
+      // ============================================================================
+      function drawSkyAndCelestial(palette, timeSec) {
+        const skyGrad = ctx.createLinearGradient(0, 0, 0, groundY);
+        skyGrad.addColorStop(0.0, palette.sky[0]);
+        skyGrad.addColorStop(0.28, palette.sky[1]);
+        skyGrad.addColorStop(0.55, palette.sky[2]);
+        skyGrad.addColorStop(0.78, palette.sky[3]);
+        skyGrad.addColorStop(0.93, palette.sky[4]);
+        skyGrad.addColorStop(1.0, palette.sky[5]);
+
+        ctx.fillStyle = skyGrad;
+        ctx.fillRect(0, 0, width, groundY);
+
+        if (palette.night > 0.05) {
+          ctx.save();
+          for (const st of stars) {
+            const twinkle = 0.55 + 0.45 * Math.sin(timeSec * st.twinkleSpd + st.phase);
+            const alpha = palette.night * twinkle * 0.9;
+            ctx.fillStyle = `rgba(240, 248, 255, ${alpha.toFixed(3)})`;
+            ctx.beginPath();
+            ctx.arc(st.xRatio * width, st.yRatio * groundY, st.r, 0, Math.PI * 2);
+            ctx.fill();
+          }
+
+          for (const sStar of shootingStars) {
+            ctx.save();
+            const mag = Math.hypot(sStar.vx, sStar.vy);
+            const tailX = sStar.x - (sStar.vx / mag) * sStar.len;
+            const tailY = sStar.y - (sStar.vy / mag) * sStar.len;
+
+            const starGrad = ctx.createLinearGradient(sStar.x, sStar.y, tailX, tailY);
+            starGrad.addColorStop(0, `rgba(255, 252, 220, ${sStar.alpha.toFixed(3)})`);
+            starGrad.addColorStop(0.4, `rgba(125, 211, 252, ${(sStar.alpha * 0.65).toFixed(3)})`);
+            starGrad.addColorStop(1, 'rgba(56, 189, 248, 0)');
+
+            ctx.strokeStyle = starGrad;
+            ctx.lineWidth = 2.8;
+            ctx.lineCap = 'round';
+            ctx.beginPath();
+            ctx.moveTo(sStar.x, sStar.y);
+            ctx.lineTo(tailX, tailY);
+            ctx.stroke();
+
+            ctx.fillStyle = `rgba(255, 255, 240, ${sStar.alpha.toFixed(3)})`;
+            ctx.beginPath();
+            ctx.arc(sStar.x, sStar.y, 3.2, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.restore();
+          }
+          ctx.restore();
+        }
+
+        const sunX = width * 0.67;
+        let sunVisibility = 0;
+        let sunY = groundY - 32;
+
+        if (cycleProgress <= 0.11) {
+          const t = cycleProgress / 0.11;
+          sunVisibility = Math.max(0, 1 - t * 1.05);
+          sunY = (groundY - 32) + t * 115;
+        } else if (cycleProgress >= 0.42) {
+          const t = (cycleProgress - 0.42) / 0.58;
+          sunVisibility = Math.min(1, t * 3.2);
+          const arcLift = Math.sin(t * Math.PI) * (groundY * 0.44);
+          const startSink = (1 - Math.min(1, t * 2.8)) * 90;
+          sunY = (groundY - 32) - arcLift + startSink;
+        }
+
+        if (sunVisibility > 0.01) {
+          const sunRadius = Math.max(width, height) * 0.24;
+          const sunGlow = ctx.createRadialGradient(sunX, sunY, 8, sunX, sunY, sunRadius);
+          sunGlow.addColorStop(0.0, `rgba(255, 244, 210, ${(0.94 * sunVisibility).toFixed(3)})`);
+          sunGlow.addColorStop(0.22, `rgba(255, 210, 145, ${(0.70 * sunVisibility).toFixed(3)})`);
+          sunGlow.addColorStop(0.52, `rgba(238, 138, 72, ${(0.30 * sunVisibility).toFixed(3)})`);
+          sunGlow.addColorStop(1.0, 'rgba(210, 105, 50, 0.0)');
+
+          ctx.fillStyle = sunGlow;
+          ctx.beginPath();
+          ctx.arc(sunX, sunY, sunRadius, 0, Math.PI * 2);
+          ctx.fill();
+
+          if (cycleProgress > 0.46 && cycleProgress < 0.94) {
+            const discAlpha = Math.sin(((cycleProgress - 0.46) / 0.48) * Math.PI) * 0.68;
+            ctx.fillStyle = `rgba(255, 250, 228, ${discAlpha.toFixed(3)})`;
+            ctx.beginPath();
+            ctx.arc(sunX, sunY, 34, 0, Math.PI * 2);
+            ctx.fill();
+          }
+
+          if (cycleProgress > 0.44 && cycleProgress < 0.74) {
+            const beamPhase = Math.sin(((cycleProgress - 0.44) / 0.30) * Math.PI);
+            ctx.save();
+            for (let b = 0; b < 4; b++) {
+              const angleOffset = -0.55 - b * 0.18 + Math.sin(timeSec * 0.4 + b) * 0.03;
+              const beamGrad = ctx.createLinearGradient(sunX, sunY, sunX + Math.cos(angleOffset) * height, groundY);
+              beamGrad.addColorStop(0, `rgba(255, 236, 175, ${(0.14 * beamPhase).toFixed(3)})`);
+              beamGrad.addColorStop(1, 'rgba(255, 220, 140, 0)');
+              ctx.fillStyle = beamGrad;
+              ctx.beginPath();
+              ctx.moveTo(sunX - 18, sunY);
+              ctx.lineTo(sunX + 28, sunY);
+              ctx.lineTo(sunX - 180 - b * 145, groundY);
+              ctx.lineTo(sunX - 280 - b * 145, groundY);
+              ctx.closePath();
+              ctx.fill();
+            }
+            ctx.restore();
+          }
+        }
+
+        if (cycleProgress > 0.07 && cycleProgress < 0.47) {
+          const moonT = (cycleProgress - 0.07) / 0.40;
+          const moonAlpha = Math.sin(moonT * Math.PI);
+          const moonX = width * 0.70;
+          const moonY = (groundY * 0.62) - Math.sin(moonT * Math.PI) * (groundY * 0.38);
+
+          const moonHalo = ctx.createRadialGradient(moonX, moonY, 12, moonX, moonY, Math.max(width, height) * 0.26);
+          moonHalo.addColorStop(0.0, `rgba(210, 235, 255, ${(0.55 * moonAlpha).toFixed(3)})`);
+          moonHalo.addColorStop(0.35, `rgba(125, 175, 240, ${(0.22 * moonAlpha).toFixed(3)})`);
+          moonHalo.addColorStop(1.0, 'rgba(60, 100, 180, 0.0)');
+
+          ctx.fillStyle = moonHalo;
+          ctx.beginPath();
+          ctx.arc(moonX, moonY, Math.max(width, height) * 0.26, 0, Math.PI * 2);
+          ctx.fill();
+
+          ctx.save();
+          ctx.fillStyle = `rgba(244, 250, 255, ${(0.95 * moonAlpha).toFixed(3)})`;
+          ctx.shadowColor = 'rgba(180, 225, 255, 0.8)';
+          ctx.shadowBlur = 18;
+          ctx.beginPath();
+          ctx.arc(moonX, moonY, 24, 0, Math.PI * 2);
+          ctx.fill();
+
+          ctx.fillStyle = `rgba(185, 208, 235, ${(0.38 * moonAlpha).toFixed(3)})`;
+          ctx.beginPath();
+          ctx.arc(moonX - 7, moonY - 5, 5, 0, Math.PI * 2);
+          ctx.arc(moonX + 8, moonY + 6, 6.5, 0, Math.PI * 2);
+          ctx.arc(moonX + 4, moonY - 8, 3.2, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.restore();
+        }
+      }
+
+      function drawParallaxMountains(palette) {
+        for (let idx = 0; idx < mountainLayers.length; idx++) {
+          const layer = mountainLayers[idx];
+          const segW = layer.segmentWidth;
+          const totalPeaks = layer.peaks.length;
+          const startIdx = Math.floor(layer.offset / segW);
+          const localShift = -(layer.offset % segW);
+          const numVisible = Math.ceil(width / segW) + 3;
+
+          ctx.beginPath();
+          ctx.moveTo(localShift, groundY);
+
+          for (let i = 0; i <= numVisible; i++) {
+            const peakIdx = (startIdx + i) % totalPeaks;
+            const px = localShift + i * segW;
+            const py = groundY - layer.peaks[peakIdx];
+            ctx.lineTo(px, py);
+          }
+
+          ctx.lineTo(localShift + numVisible * segW, groundY);
+          ctx.closePath();
+
+          ctx.fillStyle = idx === 0 ? palette.mtnBack : palette.mtnMid;
+          ctx.fill();
+
+          const nightRimAlpha = 0.22 + nightFactor * 0.35;
+          ctx.strokeStyle = nightFactor > 0.45
+            ? `rgba(135, 195, 255, ${nightRimAlpha.toFixed(3)})`
+            : `rgba(255, 205, 145, ${(0.18 + (1 - nightFactor) * 0.12).toFixed(3)})`;
+          ctx.lineWidth = 1.8;
+          ctx.stroke();
+        }
+      }
+
+      function drawGroundTrail(palette) {
+        const groundH = height - groundY;
+
+        const soilGrad = ctx.createLinearGradient(0, groundY, 0, height);
+        soilGrad.addColorStop(0, palette.soilTop);
+        soilGrad.addColorStop(0.25, palette.soilMid);
+        soilGrad.addColorStop(1, palette.soilBot);
+
+        ctx.fillStyle = soilGrad;
+        ctx.fillRect(0, groundY, width, groundH);
+
+        ctx.fillStyle = palette.horizonLine;
+        ctx.fillRect(0, groundY, width, 3);
+
+        ctx.fillStyle = palette.dashColor;
+        for (const dash of groundDashes) {
+          ctx.fillRect(dash.x, groundY + 11, dash.w, 3);
+        }
+
+        for (const peb of groundPebbles) {
+          ctx.fillStyle = peb.isLight ? palette.dashColor : palette.soilMid;
+          ctx.beginPath();
+          ctx.arc(peb.x, groundY + 18 + peb.yOffset, peb.r, 0, Math.PI * 2);
+          ctx.fill();
+        }
+
+        for (const obs of obstacles) {
+          if (obs.type === 'PIT') {
+            ctx.fillStyle = '#06070a';
+            ctx.fillRect(obs.x, groundY - 2, obs.width, groundH + 10);
+
+            ctx.fillStyle = nightFactor > 0.35 ? '#f59e0b' : '#7c5836';
+            ctx.fillRect(obs.x - 2, groundY, 5, groundH);
+            ctx.fillRect(obs.x + obs.width - 3, groundY, 5, groundH);
+
+            const beaconGlow = 0.4 + nightFactor * 0.6;
+            ctx.save();
+            ctx.fillStyle = `rgba(255, 185, 70, ${beaconGlow.toFixed(3)})`;
+            ctx.shadowColor = '#ff9d2e';
+            ctx.shadowBlur = 10 * beaconGlow;
+            ctx.fillRect(obs.x - 4, groundY - 2, 8, 6);
+            ctx.fillRect(obs.x + obs.width - 4, groundY - 2, 8, 6);
+            ctx.restore();
+          }
+        }
+      }
+
+      function drawCrate(obs) {
+        const { x, y, width: w, height: h } = obs;
+
+        ctx.save();
+
+        if (nightFactor > 0.15) {
+          const crateGlow = ctx.createRadialGradient(
+            x + w * 0.5, y + h * 0.5, 10,
+            x + w * 0.5, y + h * 0.5, w * 0.95
+          );
+          crateGlow.addColorStop(0, `rgba(255, 165, 65, ${(0.32 * nightFactor).toFixed(3)})`);
+          crateGlow.addColorStop(1, 'rgba(255, 140, 40, 0)');
+          ctx.fillStyle = crateGlow;
+          ctx.fillRect(x - 28, y - 28, w + 56, h + 56);
+        }
+
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.35)';
+        ctx.fillRect(x - 4, y + h - 3, w + 8, 5);
+
+        const woodGrad = ctx.createLinearGradient(x, y, x + w, y + h);
+        woodGrad.addColorStop(0, nightFactor > 0.4 ? '#a66838' : '#8d552c');
+        woodGrad.addColorStop(0.5, nightFactor > 0.4 ? '#824d24' : '#6e3f1d');
+        woodGrad.addColorStop(1, '#492811');
+        ctx.fillStyle = woodGrad;
+        ctx.fillRect(x, y, w, h);
+
+        ctx.strokeStyle = '#2d1708';
+        ctx.lineWidth = 1.5;
+        for (let i = 1; i < 4; i++) {
+          const px = x + (w / 4) * i;
+          ctx.beginPath();
+          ctx.moveTo(px, y + 8);
+          ctx.lineTo(px, y + h - 8);
+          ctx.stroke();
+        }
+
+        ctx.strokeStyle = '#3b1f0c';
+        ctx.lineWidth = 9;
+        ctx.beginPath();
+        ctx.moveTo(x + 8, y + h - 8);
+        ctx.lineTo(x + w - 8, y + 8);
+        ctx.stroke();
+
+        ctx.strokeStyle = nightFactor > 0.4 ? '#b87744' : '#9c6236';
+        ctx.lineWidth = 5;
+        ctx.beginPath();
+        ctx.moveTo(x + 8, y + h - 8);
+        ctx.lineTo(x + w - 8, y + 8);
+        ctx.stroke();
+
+        const frameT = 8;
+        ctx.fillStyle = nightFactor > 0.4 ? '#945a2d' : '#7c4923';
+        ctx.fillRect(x, y, w, frameT);
+        ctx.fillRect(x, y + h - frameT, w, frameT);
+        ctx.fillRect(x, y, frameT, h);
+        ctx.fillRect(x + w - frameT, y, frameT, h);
+
+        ctx.strokeStyle = nightFactor > 0.35 ? `rgba(255, 195, 110, ${(0.45 + nightFactor * 0.45).toFixed(3)})` : '#261306';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(x, y, w, h);
+        ctx.strokeStyle = '#261306';
+        ctx.strokeRect(x + frameT, y + frameT, w - frameT * 2, h - frameT * 2);
+
+        ctx.fillStyle = '#2c2623';
+        const bSize = 10;
+        ctx.fillRect(x, y, bSize, bSize);
+        ctx.fillRect(x + w - bSize, y, bSize, bSize);
+        ctx.fillRect(x, y + h - bSize, bSize, bSize);
+        ctx.fillRect(x + w - bSize, y + h - bSize, bSize, bSize);
+
+        ctx.fillStyle = nightFactor > 0.3 ? '#ffd166' : '#cfa06e';
+        const rivets = [
+          [x + 4, y + 4], [x + w - 4, y + 4],
+          [x + 4, y + h - 4], [x + w - 4, y + h - 4]
+        ];
+        for (const [rx, ry] of rivets) {
+          ctx.beginPath();
+          ctx.arc(rx, ry, nightFactor > 0.3 ? 2.1 : 1.5, 0, Math.PI * 2);
+          ctx.fill();
+        }
+
+        ctx.restore();
+      }
+
+      function drawPillar(obs) {
+        const { x, y, width: w, height: h } = obs;
+
+        ctx.save();
+
+        const beamGrad = ctx.createLinearGradient(x, 0, x + w, 0);
+        beamGrad.addColorStop(0.0, '#4e2e16');
+        beamGrad.addColorStop(0.28, nightFactor > 0.4 ? '#a4683a' : '#8c5830');
+        beamGrad.addColorStop(0.55, nightFactor > 0.4 ? '#c07f4a' : '#a86d3e');
+        beamGrad.addColorStop(0.85, '#683d1e');
+        beamGrad.addColorStop(1.0, '#3b200d');
+
+        ctx.fillStyle = beamGrad;
+        ctx.fillRect(x, y, w, h);
+
+        ctx.strokeStyle = 'rgba(40, 18, 6, 0.45)';
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.moveTo(x + w * 0.33, y);
+        ctx.lineTo(x + w * 0.33, y + h);
+        ctx.moveTo(x + w * 0.68, y);
+        ctx.lineTo(x + w * 0.68, y + h);
+        ctx.stroke();
+
+        ctx.fillStyle = nightFactor > 0.35 ? '#d97706' : '#3a200e';
+        ctx.fillRect(x - 3, y + h - 10, w + 6, 10);
+        ctx.strokeStyle = nightFactor > 0.35 ? `rgba(255, 205, 120, ${(0.5 + nightFactor * 0.4).toFixed(3)})` : '#1f1006';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(x, y, w, h);
+
+        const step = 95;
+        const glowRadius = 14 + nightFactor * 10;
+        for (let py = y + h - 35; py > 20; py -= step) {
+          ctx.fillStyle = '#2d2926';
+          ctx.fillRect(x - 3, py - 12, w + 6, 11);
+          ctx.strokeStyle = '#151210';
+          ctx.lineWidth = 1.5;
+          ctx.strokeRect(x - 3, py - 12, w + 6, 11);
+
+          ctx.fillStyle = '#9c9288';
+          ctx.beginPath();
+          ctx.arc(x + 6, py - 6.5, 2, 0, Math.PI * 2);
+          ctx.arc(x + w - 6, py - 6.5, 2, 0, Math.PI * 2);
+          ctx.fill();
+
+          const lightX = x + ((Math.floor(py / step) % 2 === 0) ? w * 0.35 : w * 0.65);
+          const lightY = py + 24;
+
+          const glow = ctx.createRadialGradient(lightX, lightY, 1, lightX, lightY, glowRadius);
+          glow.addColorStop(0, 'rgba(255, 240, 185, 1)');
+          glow.addColorStop(0.4, 'rgba(255, 170, 65, 0.85)');
+          glow.addColorStop(1, 'rgba(255, 120, 20, 0)');
+
+          ctx.fillStyle = glow;
+          ctx.beginPath();
+          ctx.arc(lightX, lightY, glowRadius, 0, Math.PI * 2);
+          ctx.fill();
+
+          ctx.fillStyle = '#fff5d6';
+          ctx.beginPath();
+          ctx.arc(lightX, lightY, 3.8, 0, Math.PI * 2);
+          ctx.fill();
+        }
+
+        ctx.restore();
+      }
+
+      function drawCollectibles(time) {
+        for (const item of collectibles) {
+          if (item.collected) continue;
+
+          const bob = Math.sin(time * 5.5 + item.phase) * 3.5;
+          const cx = item.x;
+          const cy = item.y + bob;
+
+          ctx.save();
+
+          if (item.type === 'COIN') {
+            const r = item.r;
+
+            const glow = ctx.createRadialGradient(cx, cy, r * 0.3, cx, cy, r * 1.65);
+            glow.addColorStop(0, 'rgba(255, 145, 50, 0.45)');
+            glow.addColorStop(1, 'rgba(255, 110, 20, 0)');
+            ctx.fillStyle = glow;
+            ctx.beginPath();
+            ctx.arc(cx, cy, r * 1.65, 0, Math.PI * 2);
+            ctx.fill();
+
+            const coinGrad = ctx.createLinearGradient(cx - r, cy - r, cx + r, cy + r);
+            coinGrad.addColorStop(0, '#ffb65c');
+            coinGrad.addColorStop(0.5, '#e06d28');
+            coinGrad.addColorStop(1, '#8f3711');
+
+            ctx.fillStyle = coinGrad;
+            ctx.beginPath();
+            ctx.arc(cx, cy, r, 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.lineWidth = 2;
+            ctx.strokeStyle = '#4a1b07';
+            ctx.stroke();
+
+            ctx.fillStyle = '#b94e1c';
+            ctx.beginPath();
+            ctx.arc(cx, cy, r * 0.74, 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.lineWidth = 1.2;
+            ctx.strokeStyle = '#ffbe6b';
+            ctx.stroke();
+
+            ctx.fillStyle = '#ffd984';
+            ctx.beginPath();
+            ctx.moveTo(cx, cy - r * 0.46);
+            ctx.quadraticCurveTo(cx + r * 0.36, cy - r * 0.05, cx + r * 0.22, cy + r * 0.34);
+            ctx.quadraticCurveTo(cx, cy + r * 0.48, cx - r * 0.22, cy + r * 0.34);
+            ctx.quadraticCurveTo(cx - r * 0.36, cy - r * 0.05, cx, cy - r * 0.46);
+            ctx.fill();
+          } else if (item.type === 'PEG') {
+            const pw = 9;
+            const ph = 28;
+            const px = cx - pw / 2;
+            const py = cy - ph / 2;
+
+            const glow = ctx.createRadialGradient(cx, cy + 3, 2, cx, cy + 3, 20);
+            glow.addColorStop(0, 'rgba(255, 160, 60, 0.75)');
+            glow.addColorStop(1, 'rgba(255, 100, 20, 0)');
+            ctx.fillStyle = glow;
+            ctx.beginPath();
+            ctx.arc(cx, cy + 3, 20, 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.fillStyle = '#472515';
+            ctx.beginPath();
+            ctx.roundRect(px, py, pw, ph, 3);
+            ctx.fill();
+            ctx.lineWidth = 1.5;
+            ctx.strokeStyle = '#241108';
+            ctx.stroke();
+
+            const coreGrad = ctx.createLinearGradient(px, py + 7, px, py + ph - 3);
+            coreGrad.addColorStop(0, '#ffea9f');
+            coreGrad.addColorStop(0.5, '#ff8826');
+            coreGrad.addColorStop(1, '#b83c0c');
+            ctx.fillStyle = coreGrad;
+            ctx.fillRect(px + 1.8, py + 7, pw - 3.6, ph - 10);
+          } else if (item.type === 'ORB') {
+            const r = item.r;
+            const pulse = 1 + Math.sin(time * 7) * 0.12;
+
+            const outerGlow = ctx.createRadialGradient(cx, cy, 3, cx, cy, r * 2.2 * pulse);
+            outerGlow.addColorStop(0, 'rgba(217, 249, 157, 0.95)');
+            outerGlow.addColorStop(0.45, 'rgba(132, 204, 22, 0.55)');
+            outerGlow.addColorStop(1, 'rgba(56, 189, 248, 0)');
+            ctx.fillStyle = outerGlow;
+            ctx.beginPath();
+            ctx.arc(cx, cy, r * 2.2 * pulse, 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.fillStyle = '#ecfccb';
+            ctx.beginPath();
+            ctx.arc(cx, cy, r * 0.72, 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.lineWidth = 2.5;
+            ctx.strokeStyle = '#65a30d';
+            ctx.stroke();
+
+            const sparkX = cx + Math.cos(time * 6) * (r * 1.15);
+            const sparkY = cy + Math.sin(time * 6) * (r * 1.15);
+            ctx.fillStyle = '#fef08a';
+            ctx.beginPath();
+            ctx.arc(sparkX, sparkY, 3.5, 0, Math.PI * 2);
+            ctx.fill();
+          }
+
+          ctx.restore();
+        }
+      }
+
+      function drawFox() {
+        ctx.save();
+        ctx.translate(fox.x, fox.y);
+
+        if (spiritDashTimer > 0) {
+          const spiritGlow = ctx.createRadialGradient(4, -32, 6, 4, -32, 115);
+          spiritGlow.addColorStop(0.0, 'rgba(224, 242, 254, 0.75)');
+          spiritGlow.addColorStop(0.45, 'rgba(56, 189, 248, 0.42)');
+          spiritGlow.addColorStop(1.0, 'rgba(2, 132, 199, 0)');
+          ctx.fillStyle = spiritGlow;
+          ctx.beginPath();
+          ctx.arc(4, -32, 115, 0, Math.PI * 2);
+          ctx.fill();
+        }
+
+        if (nightFactor > 0.1) {
+          const lanternGlow = ctx.createRadialGradient(6, -34, 8, 6, -34, 135);
+          lanternGlow.addColorStop(0.0, `rgba(255, 210, 130, ${(0.36 * nightFactor).toFixed(3)})`);
+          lanternGlow.addColorStop(0.45, `rgba(255, 160, 75, ${(0.16 * nightFactor).toFixed(3)})`);
+          lanternGlow.addColorStop(1.0, 'rgba(255, 140, 50, 0)');
+          ctx.fillStyle = lanternGlow;
+          ctx.beginPath();
+          ctx.arc(6, -34, 135, 0, Math.PI * 2);
+          ctx.fill();
+        }
+
+        if (!fox.fellInPit) {
+          const heightAboveGround = Math.max(0, groundY - fox.y);
+          const shadowScale = Math.max(0.25, 1 - heightAboveGround / 240);
+          ctx.save();
+          ctx.translate(0, heightAboveGround);
+          ctx.fillStyle = `rgba(12, 8, 5, ${0.42 * shadowScale})`;
+          ctx.beginPath();
+          ctx.ellipse(0, 2, 38 * shadowScale, 6 * shadowScale, 0, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.restore();
+        }
+
+        ctx.scale(fox.scaleX, fox.scaleY);
+
+        const isSliding = fox.isSliding;
+        const isAirborne = !fox.onGround;
+        const t = fox.runCycle;
+
+        let bodyY = -36;
+        let bodyPitch = fox.pitchAngle;
+        let frontLegA = 0, frontLegB = 0;
+        let backLegA = 0, backLegB = 0;
+        let tailWave = Math.sin(t * 1.1) * 0.18;
+
+        if (isSliding) {
+          bodyY = -19;
+          bodyPitch = 0.08;
+          frontLegA = 1.15;
+          frontLegB = 1.25;
+          backLegA = -1.22;
+          backLegB = -1.12;
+          tailWave = Math.sin(t * 2.2) * 0.08;
+        } else if (isAirborne) {
+          bodyY = -38;
+          const vyNorm = Math.max(-1, Math.min(1, fox.vy / 700));
+          frontLegA = 0.55 - vyNorm * 0.45;
+          frontLegB = 0.85 - vyNorm * 0.35;
+          backLegA = -0.75 - vyNorm * 0.35;
+          backLegB = -0.95 - vyNorm * 0.25;
+          tailWave = -vyNorm * 0.3;
+        } else {
+          bodyY = -36 + Math.sin(t * 2) * 3.2;
+          bodyPitch = Math.cos(t) * 0.09;
+          frontLegA = Math.sin(t) * 0.78;
+          frontLegB = Math.sin(t + 0.55) * 0.78;
+          backLegA = -Math.sin(t + 0.25) * 0.82;
+          backLegB = -Math.sin(t + 0.85) * 0.82;
+        }
+
+        if (gameState === 'GAMEOVER') {
+          bodyPitch = -0.18;
+        }
+
+        ctx.translate(0, bodyY);
+        ctx.rotate(bodyPitch);
+
+        function drawLeg(hipX, hipY, angle, isFront, isFarSide) {
+          ctx.save();
+          ctx.translate(hipX, hipY);
+          ctx.rotate(angle);
+
+          const upperColor = isFarSide ? '#9e3b14' : '#d95c23';
+          const pawColor = isFarSide ? '#1f1410' : '#2f1f19';
+
+          ctx.fillStyle = upperColor;
+          ctx.beginPath();
+          ctx.roundRect(-6, -3, 12, 18, 5);
+          ctx.fill();
+
+          const kneeBend = isSliding ? 0.1 : (isFront ? Math.max(0, -angle * 0.6) : Math.max(0, angle * 0.6));
+          ctx.translate(0, 14);
+          ctx.rotate(kneeBend);
+
+          ctx.fillStyle = pawColor;
+          ctx.beginPath();
+          ctx.roundRect(-4.5, -2, 9, 15, 4);
+          ctx.fill();
+
+          ctx.beginPath();
+          ctx.ellipse(2, 12, 5.5, 3.2, 0, 0, Math.PI * 2);
+          ctx.fill();
+
+          ctx.restore();
+        }
+
+        drawLeg(-22, 6, backLegB, false, true);
+        drawLeg(20, 6, frontLegB, true, true);
+
+        ctx.save();
+        ctx.translate(-32, 0);
+        ctx.rotate((isSliding ? 0.12 : -0.15) + tailWave);
+
+        const tailGrad = ctx.createLinearGradient(0, 0, -56, 8);
+        tailGrad.addColorStop(0, '#c74c19');
+        tailGrad.addColorStop(0.65, '#e86f2c');
+        tailGrad.addColorStop(1, '#f38c42');
+
+        ctx.fillStyle = tailGrad;
+        ctx.beginPath();
+        ctx.moveTo(4, -4);
+        ctx.bezierCurveTo(-18, -18, -44, -14, -58, 2);
+        ctx.bezierCurveTo(-44, 17, -16, 15, 4, 5);
+        ctx.closePath();
+        ctx.fill();
+
+        ctx.fillStyle = '#fcf1e1';
+        ctx.beginPath();
+        ctx.moveTo(-38, -8);
+        ctx.bezierCurveTo(-48, -10, -56, -4, -60, 2);
+        ctx.bezierCurveTo(-54, 10, -45, 11, -36, 7);
+        ctx.quadraticCurveTo(-42, 0, -38, -8);
+        ctx.closePath();
+        ctx.fill();
+        ctx.restore();
+
+        const bodyGrad = ctx.createLinearGradient(-30, -14, 28, 16);
+        bodyGrad.addColorStop(0, '#c94c1a');
+        bodyGrad.addColorStop(0.5, '#e66c2a');
+        bodyGrad.addColorStop(1, '#f58b3e');
+
+        ctx.fillStyle = bodyGrad;
+        ctx.beginPath();
+        ctx.moveTo(-32, -2);
+        ctx.bezierCurveTo(-22, -16, 14, -16, 30, -5);
+        ctx.bezierCurveTo(36, 4, 28, 14, 14, 14);
+        ctx.bezierCurveTo(-4, 14, -24, 12, -32, 5);
+        ctx.closePath();
+        ctx.fill();
+
+        ctx.fillStyle = '#faeadd';
+        ctx.beginPath();
+        ctx.moveTo(-18, 9);
+        ctx.quadraticCurveTo(4, 15, 25, 9);
+        ctx.quadraticCurveTo(32, 3, 28, -2);
+        ctx.quadraticCurveTo(16, 7, -18, 9);
+        ctx.closePath();
+        ctx.fill();
+
+        ctx.save();
+        ctx.strokeStyle = '#331c0e';
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.moveTo(-4, -12);
+        ctx.lineTo(-2, 12);
+        ctx.moveTo(8, -10);
+        ctx.lineTo(24, 5);
+        ctx.stroke();
+
+        ctx.translate(-4, -14);
+        ctx.rotate(-0.08);
+        ctx.fillStyle = '#5c361e';
+        ctx.beginPath();
+        ctx.roundRect(-13, -9, 24, 15, 5);
+        ctx.fill();
+        ctx.strokeStyle = '#291509';
+        ctx.lineWidth = 1.6;
+        ctx.stroke();
+
+        ctx.fillStyle = '#3d2211';
+        ctx.beginPath();
+        ctx.roundRect(-12, -9, 22, 7, 3);
+        ctx.fill();
+
+        ctx.fillStyle = '#f0b342';
+        ctx.fillRect(-2, -4, 4, 4);
+        ctx.restore();
+
+        drawLeg(-18, 7, backLegA, false, false);
+        drawLeg(23, 7, frontLegA, true, false);
+
+        ctx.save();
+        ctx.translate(28, isSliding ? -6 : -12);
+        ctx.rotate(isSliding ? 0.14 : -bodyPitch * 0.35);
+
+        ctx.save();
+        ctx.translate(-2, -11);
+        ctx.rotate(isSliding ? -0.75 : -0.2);
+        ctx.fillStyle = '#b54115';
+        ctx.beginPath();
+        ctx.moveTo(-5, 2);
+        ctx.lineTo(0, -15);
+        ctx.lineTo(6, 2);
+        ctx.closePath();
+        ctx.fill();
+        ctx.restore();
+
+        const headGrad = ctx.createLinearGradient(-10, -14, 22, 10);
+        headGrad.addColorStop(0, '#d95a22');
+        headGrad.addColorStop(0.6, '#ef7832');
+        headGrad.addColorStop(1, '#f79548');
+
+        ctx.fillStyle = headGrad;
+        ctx.beginPath();
+        ctx.moveTo(-12, -4);
+        ctx.bezierCurveTo(-10, -15, 6, -15, 14, -6);
+        ctx.lineTo(28, 0);
+        ctx.quadraticCurveTo(27, 6, 14, 7);
+        ctx.quadraticCurveTo(0, 10, -12, 5);
+        ctx.closePath();
+        ctx.fill();
+
+        ctx.fillStyle = '#fdf2e6';
+        ctx.beginPath();
+        ctx.moveTo(-4, 3);
+        ctx.quadraticCurveTo(6, 0, 26, 2);
+        ctx.quadraticCurveTo(24, 7, 12, 8);
+        ctx.quadraticCurveTo(0, 9, -6, 6);
+        ctx.closePath();
+        ctx.fill();
+
+        ctx.fillStyle = '#1e1410';
+        ctx.beginPath();
+        ctx.arc(27.5, 0.5, 2.6, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.fillStyle = '#1c120e';
+        ctx.beginPath();
+        ctx.arc(10, -3.5, 2.6, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.fillStyle = '#ffffff';
+        ctx.beginPath();
+        ctx.arc(10.8, -4.3, 1.0, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.save();
+        ctx.translate(-5, -10);
+        ctx.rotate(isSliding ? -0.85 : -0.28);
+
+        ctx.fillStyle = '#e06024';
+        ctx.beginPath();
+        ctx.moveTo(-6, 3);
+        ctx.lineTo(-1, -16);
+        ctx.lineTo(7, 2);
+        ctx.closePath();
+        ctx.fill();
+
+        ctx.fillStyle = '#2b1912';
+        ctx.beginPath();
+        ctx.moveTo(-3.2, -7);
+        ctx.lineTo(-1, -16);
+        ctx.lineTo(2.5, -7);
+        ctx.closePath();
+        ctx.fill();
+
+        ctx.fillStyle = '#fae8d4';
+        ctx.beginPath();
+        ctx.moveTo(-3, 1);
+        ctx.lineTo(-0.5, -9);
+        ctx.lineTo(3.5, 1);
+        ctx.closePath();
+        ctx.fill();
+        ctx.restore();
+
+        ctx.restore();
+
+        if (fireflyTimer > 0) {
+          const fx = Math.cos(fireflyAngle) * 44 + 8;
+          const fy = Math.sin(fireflyAngle * 1.5) * 18 - 18;
+
+          const ffGlow = ctx.createRadialGradient(fx, fy, 2, fx, fy, 24);
+          ffGlow.addColorStop(0, 'rgba(236, 252, 203, 0.98)');
+          ffGlow.addColorStop(0.45, 'rgba(163, 230, 53, 0.65)');
+          ffGlow.addColorStop(1, 'rgba(132, 204, 22, 0)');
+          ctx.fillStyle = ffGlow;
+          ctx.beginPath();
+          ctx.arc(fx, fy, 24, 0, Math.PI * 2);
+          ctx.fill();
+
+          ctx.fillStyle = '#ffffff';
+          ctx.beginPath();
+          ctx.arc(fx, fy, 4.2, 0, Math.PI * 2);
+          ctx.fill();
+        }
+
+        ctx.restore();
+      }
+
+      function drawParticlesAndPopups() {
+        if (auroraPoints.length > 1) {
+          ctx.save();
+          for (let i = 0; i < auroraPoints.length - 1; i++) {
+            const pt1 = auroraPoints[i];
+            const pt2 = auroraPoints[i + 1];
+            ctx.strokeStyle = spiritDashTimer > 0
+              ? `rgba(56, 189, 248, ${(pt1.alpha * 0.75).toFixed(3)})`
+              : `rgba(45, 212, 191, ${(pt1.alpha * 0.65).toFixed(3)})`;
+            ctx.lineWidth = Math.max(2, 14 * pt1.alpha);
+            ctx.lineCap = 'round';
+            ctx.beginPath();
+            ctx.moveTo(pt1.x, pt1.y);
+            ctx.lineTo(pt2.x, pt2.y);
+            ctx.stroke();
+          }
+          ctx.restore();
+        }
+
+        for (const p of particles) {
+          ctx.save();
+          ctx.globalAlpha = Math.max(0, p.alpha);
+          ctx.fillStyle = p.color;
+
+          if (p.type === 'PETAL') {
+            ctx.translate(p.x, p.y);
+            ctx.rotate(p.rot || 0);
+            ctx.beginPath();
+            ctx.ellipse(0, 0, p.size, p.size * 0.55, 0, 0, Math.PI * 2);
+            ctx.fill();
+          } else {
+            if (p.type === 'EMBER') {
+              ctx.shadowColor = p.color;
+              ctx.shadowBlur = 8;
+            }
+            ctx.beginPath();
+            ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+            ctx.fill();
+          }
+          ctx.restore();
+        }
+
+        for (const pop of popups) {
+          ctx.save();
+          ctx.globalAlpha = Math.max(0, pop.alpha);
+          ctx.font = `700 ${Math.round(18 * pop.scale)}px 'Inter', sans-serif`;
+          ctx.fillStyle = pop.color;
+          ctx.shadowColor = 'rgba(0, 0, 0, 0.55)';
+          ctx.shadowBlur = 6;
+          ctx.fillText(pop.text, pop.x, pop.y);
+          ctx.restore();
+        }
+      }
+
+      function render(timeSec) {
+        ctx.save();
+
+        if (shakeTime > 0) {
+          const intensity = (shakeTime / 0.32) * shakeMagnitude;
+          const sx = (Math.random() - 0.5) * intensity;
+          const sy = (Math.random() - 0.5) * intensity;
+          ctx.translate(sx, sy);
+        }
+
+        const palette = getInterpolatedPalette(cycleProgress);
+
+        drawSkyAndCelestial(palette, timeSec);
+        drawParallaxMountains(palette);
+        drawGroundTrail(palette);
+
+        for (const obs of obstacles) {
+          if (obs.type === 'CRATE') {
+            drawCrate(obs);
+          } else if (obs.type === 'PILLAR') {
+            drawPillar(obs);
+          }
+        }
+
+        drawCollectibles(timeSec);
+        drawFox();
+        drawParticlesAndPopups();
+
+        ctx.restore();
+      }
+
+      let lastFrameTime = performance.now();
+
+      function gameLoop(now) {
+        const dt = Math.min(0.05, Math.max(0.001, (now - lastFrameTime) / 1000));
+        lastFrameTime = now;
+
+        update(dt);
+        render(now / 1000);
+
+        requestAnimationFrame(gameLoop);
+      }
+
+      window.onload = function () {
+        resizeCanvas();
+        initScenery();
+        initLandingScreen();
+        requestAnimationFrame(gameLoop);
+      };
+    })();
+  </script>
+</body>
+</html>
